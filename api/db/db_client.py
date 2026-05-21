@@ -13,6 +13,7 @@ from api.db.telephony_phone_number_client import TelephonyPhoneNumberClient
 from api.db.tool_client import ToolClient
 from api.db.user_client import UserClient
 from api.db.webhook_credential_client import WebhookCredentialClient
+from api.db.webhook_subscription_client import WebhookSubscriptionClient
 from api.db.workflow_client import WorkflowClient
 from api.db.workflow_recording_client import WorkflowRecordingClient
 from api.db.workflow_run_client import WorkflowRunClient
@@ -39,6 +40,7 @@ class DBClient(
     WorkflowRecordingClient,
     TelephonyConfigurationClient,
     TelephonyPhoneNumberClient,
+    WebhookSubscriptionClient,
 ):
     """
     Unified database client that combines all specialized database operations.

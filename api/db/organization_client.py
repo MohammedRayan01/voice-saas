@@ -117,6 +117,23 @@ class OrganizationClient(BaseDBClient):
             await session.commit()
 
     # ------------------------------------------------------------------
+    # Billing
+    # ------------------------------------------------------------------
+
+    async def update_organization_billing(self, organization_id: int, **kwargs) -> None:
+        """Update any subset of billing fields on an organization."""
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(OrganizationModel).where(OrganizationModel.id == organization_id)
+            )
+            org = result.scalars().first()
+            if not org:
+                return
+            for key, value in kwargs.items():
+                setattr(org, key, value)
+            await session.commit()
+
+    # ------------------------------------------------------------------
     # Organization members (RBAC)
     # ------------------------------------------------------------------
 

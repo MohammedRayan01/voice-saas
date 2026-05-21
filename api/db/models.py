@@ -107,6 +107,15 @@ class OrganizationModel(Base):
 
     price_per_second_usd = Column(Float, nullable=True)
 
+    # Billing / subscription fields
+    plan = Column(String(20), nullable=False, default="free", server_default=text("'free'"))
+    razorpay_customer_id = Column(String, nullable=True)
+    razorpay_subscription_id = Column(String, nullable=True)
+    subscription_status = Column(String(20), nullable=False, default="trialing", server_default=text("'trialing'"))
+    minutes_limit = Column(Integer, nullable=True)  # None = unlimited
+    seats_limit = Column(Integer, nullable=True)
+    trial_ends_at = Column(DateTime(timezone=True), nullable=True)
+
     # Relationships
     users = relationship(
         "UserModel",
@@ -144,6 +153,20 @@ class OrganizationMemberModel(Base):
     __table_args__ = (
         UniqueConstraint("organization_id", "user_id", name="uq_org_members_org_user"),
     )
+
+
+class WebhookSubscriptionModel(Base):
+    __tablename__ = "webhook_subscriptions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    url = Column(Text, nullable=False)
+    events = Column(JSON, nullable=False, default=list)
+    secret = Column(String, nullable=True)
+    name = Column(String, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
 
 class APIKeyModel(Base):

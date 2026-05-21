@@ -221,7 +221,45 @@ async def initiate_call(
         initial_context=updated_initial_context,
     )
 
-    return {"message": f"Call initiated successfully with run name {workflow_run_name}"}
+    return {
+        "message": f"Call initiated successfully with run name {workflow_run_name}",
+        "workflow_run_id": workflow_run_id,
+        "call_id": workflow_run_id,
+    }
+
+
+class QuickCallRequest(BaseModel):
+    to_phone: str
+    workflow_id: int
+    context_variables: dict | None = None
+    telephony_configuration_id: int | None = None
+
+
+@router.post("/call")
+async def quick_call(request: QuickCallRequest, user: UserModel = Depends(get_user)):
+    """Ad-hoc outbound call — non-campaign, single number, immediate dispatch."""
+    return await initiate_call(
+        InitiateCallRequest(
+            workflow_id=request.workflow_id,
+            phone_number=request.to_phone,
+            telephony_configuration_id=request.telephony_configuration_id,
+        ),
+        user,
+    )
+
+
+@router.get("/call/{call_id}/status")
+async def get_call_status(call_id: int, user: UserModel = Depends(get_user)):
+    """Poll the state of an outbound call by its workflow_run_id."""
+    run = await db_client.get_workflow_run(call_id, user.id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Call not found")
+    return {
+        "call_id": call_id,
+        "state": run.state,
+        "created_at": run.created_at.isoformat() if run.created_at else None,
+        "ended_at": run.ended_at.isoformat() if hasattr(run, "ended_at") and run.ended_at else None,
+    }
 
 
 async def _verify_organization_phone_number(
