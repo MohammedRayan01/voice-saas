@@ -121,6 +121,29 @@ class OrganizationModel(Base):
         "OrganizationConfigurationModel", back_populates="organization"
     )
     api_keys = relationship("APIKeyModel", back_populates="organization")
+    members = relationship("OrganizationMemberModel", back_populates="organization", foreign_keys="OrganizationMemberModel.organization_id")
+
+
+class OrganizationMemberModel(Base):
+    __tablename__ = "organization_members"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String(20), nullable=False, default="member")
+    invited_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    invite_email = Column(String, nullable=True)
+    invite_token = Column(String, nullable=True, unique=True)
+    accepted_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+    organization = relationship("OrganizationModel", back_populates="members", foreign_keys=[organization_id])
+    user = relationship("UserModel", foreign_keys=[user_id])
+    invited_by = relationship("UserModel", foreign_keys=[invited_by_user_id])
+
+    __table_args__ = (
+        UniqueConstraint("organization_id", "user_id", name="uq_org_members_org_user"),
+    )
 
 
 class APIKeyModel(Base):

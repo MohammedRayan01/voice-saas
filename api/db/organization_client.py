@@ -1,13 +1,16 @@
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 
 from api.db.base_client import BaseDBClient
 from api.db.models import (
     APIKeyModel,
+    OrganizationMemberModel,
     OrganizationModel,
+    UserModel,
     organization_users_association,
 )
 from api.utils.api_key import generate_api_key
@@ -112,3 +115,125 @@ class OrganizationClient(BaseDBClient):
 
             await session.execute(stmt)
             await session.commit()
+
+    # ------------------------------------------------------------------
+    # Organization members (RBAC)
+    # ------------------------------------------------------------------
+
+    async def list_organization_members(
+        self, organization_id: int
+    ) -> List[OrganizationMemberModel]:
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(OrganizationMemberModel)
+                .options(selectinload(OrganizationMemberModel.user))
+                .where(OrganizationMemberModel.organization_id == organization_id)
+                .order_by(OrganizationMemberModel.created_at)
+            )
+            return result.scalars().all()
+
+    async def get_organization_member(
+        self, organization_id: int, user_id: int
+    ) -> Optional[OrganizationMemberModel]:
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(OrganizationMemberModel)
+                .options(selectinload(OrganizationMemberModel.user))
+                .where(
+                    OrganizationMemberModel.organization_id == organization_id,
+                    OrganizationMemberModel.user_id == user_id,
+                )
+            )
+            return result.scalars().first()
+
+    async def create_organization_member_invite(
+        self,
+        organization_id: int,
+        invite_email: str,
+        role: str,
+        invited_by_user_id: int,
+        invite_token: str,
+    ) -> OrganizationMemberModel:
+        async with self.async_session() as session:
+            # Check if a user with this email already exists
+            user_result = await session.execute(
+                select(UserModel).where(UserModel.email == invite_email)
+            )
+            existing_user = user_result.scalars().first()
+
+            member = OrganizationMemberModel(
+                organization_id=organization_id,
+                user_id=existing_user.id if existing_user else invited_by_user_id,
+                role=role,
+                invited_by_user_id=invited_by_user_id,
+                invite_email=invite_email,
+                invite_token=invite_token,
+            )
+            session.add(member)
+            await session.commit()
+            await session.refresh(member)
+
+            # Eagerly load user relationship
+            result = await session.execute(
+                select(OrganizationMemberModel)
+                .options(selectinload(OrganizationMemberModel.user))
+                .where(OrganizationMemberModel.id == member.id)
+            )
+            return result.scalars().first()
+
+    async def accept_organization_invite(
+        self, invite_token: str, user_id: int
+    ) -> Optional[OrganizationMemberModel]:
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(OrganizationMemberModel).where(
+                    OrganizationMemberModel.invite_token == invite_token,
+                    OrganizationMemberModel.accepted_at.is_(None),
+                )
+            )
+            member = result.scalars().first()
+            if not member:
+                return None
+            member.user_id = user_id
+            member.accepted_at = datetime.now(timezone.utc)
+            member.invite_token = None
+            await session.commit()
+            await session.refresh(member)
+            return member
+
+    async def update_organization_member_role(
+        self, organization_id: int, user_id: int, role: str
+    ) -> Optional[OrganizationMemberModel]:
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(OrganizationMemberModel)
+                .options(selectinload(OrganizationMemberModel.user))
+                .where(
+                    OrganizationMemberModel.organization_id == organization_id,
+                    OrganizationMemberModel.user_id == user_id,
+                )
+            )
+            member = result.scalars().first()
+            if not member:
+                return None
+            member.role = role
+            await session.commit()
+            await session.refresh(member)
+            return member
+
+    async def delete_organization_member(
+        self, organization_id: int, user_id: int
+    ) -> bool:
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(OrganizationMemberModel).where(
+                    OrganizationMemberModel.organization_id == organization_id,
+                    OrganizationMemberModel.user_id == user_id,
+                )
+            )
+            member = result.scalars().first()
+            if not member:
+                return False
+            await session.delete(member)
+            await session.commit()
+            return True

@@ -1,8 +1,9 @@
-from typing import List, Optional
+import secrets
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from sqlalchemy.exc import IntegrityError
 
 from api.constants import DEFAULT_CAMPAIGN_RETRY_CONFIG, DEFAULT_ORG_CONCURRENCY_LIMIT
@@ -833,6 +834,145 @@ async def delete_langfuse_credentials(user: UserModel = Depends(get_user)):
     )
 
     return {"message": "Langfuse credentials deleted successfully"}
+
+
+# ---------------------------------------------------------------------------
+# Team / member management
+# ---------------------------------------------------------------------------
+
+MemberRole = Literal["owner", "admin", "member", "viewer"]
+
+ROLE_RANK = {"owner": 4, "admin": 3, "member": 2, "viewer": 1}
+
+
+class MemberResponse(BaseModel):
+    id: int
+    user_id: int
+    email: Optional[str]
+    role: str
+    accepted_at: Optional[str]
+    created_at: str
+
+
+class InviteRequest(BaseModel):
+    email: EmailStr
+    role: MemberRole = "member"
+
+
+class UpdateRoleRequest(BaseModel):
+    role: MemberRole
+
+
+def _member_to_response(m) -> MemberResponse:
+    return MemberResponse(
+        id=m.id,
+        user_id=m.user_id,
+        email=m.user.email if m.user else m.invite_email,
+        role=m.role,
+        accepted_at=m.accepted_at.isoformat() if m.accepted_at else None,
+        created_at=m.created_at.isoformat(),
+    )
+
+
+def _require_role(user_role: str, min_role: str):
+    if ROLE_RANK.get(user_role, 0) < ROLE_RANK[min_role]:
+        raise HTTPException(status_code=403, detail=f"Requires {min_role} role or above")
+
+
+@router.get("/members", response_model=List[MemberResponse])
+async def list_members(user: UserModel = Depends(get_user)):
+    if not user.selected_organization_id:
+        raise HTTPException(status_code=400, detail="No organization selected")
+    members = await db_client.list_organization_members(user.selected_organization_id)
+    return [_member_to_response(m) for m in members]
+
+
+@router.post("/members/invite", response_model=MemberResponse)
+async def invite_member(request: InviteRequest, user: UserModel = Depends(get_user)):
+    if not user.selected_organization_id:
+        raise HTTPException(status_code=400, detail="No organization selected")
+
+    caller_member = await db_client.get_organization_member(
+        user.selected_organization_id, user.id
+    )
+    caller_role = caller_member.role if caller_member else "owner"
+    _require_role(caller_role, "admin")
+
+    token = secrets.token_urlsafe(32)
+    member = await db_client.create_organization_member_invite(
+        organization_id=user.selected_organization_id,
+        invite_email=request.email,
+        role=request.role,
+        invited_by_user_id=user.id,
+        invite_token=token,
+    )
+    return _member_to_response(member)
+
+
+@router.patch("/members/{member_user_id}", response_model=MemberResponse)
+async def update_member_role(
+    member_user_id: int,
+    request: UpdateRoleRequest,
+    user: UserModel = Depends(get_user),
+):
+    if not user.selected_organization_id:
+        raise HTTPException(status_code=400, detail="No organization selected")
+
+    caller_member = await db_client.get_organization_member(
+        user.selected_organization_id, user.id
+    )
+    caller_role = caller_member.role if caller_member else "owner"
+    _require_role(caller_role, "admin")
+
+    if member_user_id == user.id:
+        raise HTTPException(status_code=400, detail="Cannot change your own role")
+
+    member = await db_client.update_organization_member_role(
+        organization_id=user.selected_organization_id,
+        user_id=member_user_id,
+        role=request.role,
+    )
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not found")
+    return _member_to_response(member)
+
+
+@router.delete("/members/{member_user_id}")
+async def remove_member(member_user_id: int, user: UserModel = Depends(get_user)):
+    if not user.selected_organization_id:
+        raise HTTPException(status_code=400, detail="No organization selected")
+
+    caller_member = await db_client.get_organization_member(
+        user.selected_organization_id, user.id
+    )
+    caller_role = caller_member.role if caller_member else "owner"
+    _require_role(caller_role, "admin")
+
+    if member_user_id == user.id:
+        raise HTTPException(status_code=400, detail="Cannot remove yourself")
+
+    deleted = await db_client.delete_organization_member(
+        organization_id=user.selected_organization_id,
+        user_id=member_user_id,
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Member not found")
+    return {"message": "Member removed"}
+
+
+class AcceptInviteRequest(BaseModel):
+    token: str
+
+
+@router.post("/members/accept-invite")
+async def accept_invite(request: AcceptInviteRequest, user: UserModel = Depends(get_user)):
+    member = await db_client.accept_organization_invite(
+        invite_token=request.token,
+        user_id=user.id,
+    )
+    if not member:
+        raise HTTPException(status_code=404, detail="Invalid or expired invite token")
+    return {"message": "Invite accepted", "organization_id": member.organization_id}
 
 
 class RetryConfigResponse(BaseModel):
