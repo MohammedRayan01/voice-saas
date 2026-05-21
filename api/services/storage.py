@@ -11,6 +11,11 @@ from api.constants import (
     MINIO_SECURE,
     S3_BUCKET,
     S3_REGION,
+    SUPABASE_S3_ACCESS_KEY,
+    SUPABASE_S3_ENDPOINT,
+    SUPABASE_S3_REGION,
+    SUPABASE_S3_SECRET_KEY,
+    SUPABASE_STORAGE_BUCKET,
 )
 from api.enums import Environment, StorageBackend
 
@@ -44,6 +49,22 @@ def get_storage_for_backend(backend: str) -> BaseFileSystem:
             bucket_name=MINIO_BUCKET,
             secure=MINIO_SECURE,
             public_endpoint=MINIO_PUBLIC_ENDPOINT,
+        )
+
+    # Supabase Storage (S3-compatible)
+    elif backend == StorageBackend.SUPABASE.value:
+        if not SUPABASE_STORAGE_BUCKET:
+            raise ValueError("SUPABASE_STORAGE_BUCKET is required for Supabase storage")
+        logger.info(
+            f"Initializing Supabase storage at {SUPABASE_S3_ENDPOINT} "
+            f"with bucket '{SUPABASE_STORAGE_BUCKET}'"
+        )
+        return S3FileSystem(
+            bucket_name=SUPABASE_STORAGE_BUCKET,
+            region_name=SUPABASE_S3_REGION,
+            endpoint_url=SUPABASE_S3_ENDPOINT,
+            aws_access_key_id=SUPABASE_S3_ACCESS_KEY,
+            aws_secret_access_key=SUPABASE_S3_SECRET_KEY,
         )
 
     # Code 1: AWS S3 implementation (cloud deployments)

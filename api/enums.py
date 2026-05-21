@@ -51,13 +51,16 @@ class StorageBackend(Enum):
     # Currently implemented backends
     S3 = "s3"  # AWS S3 for cloud deployments
     MINIO = "minio"  # MinIO for local/OSS deployments
+    SUPABASE = "supabase"  # Supabase Storage (S3-compatible)
 
     @classmethod
     def get_current_backend(cls):
-        """Get current backend based on ENABLE_AWS_S3 flag."""
-        from api.constants import ENABLE_AWS_S3
+        """Get current backend based on env flags."""
+        from api.constants import ENABLE_AWS_S3, SUPABASE_S3_ENDPOINT
 
-        if ENABLE_AWS_S3:
+        if SUPABASE_S3_ENDPOINT:
+            return cls.SUPABASE
+        elif ENABLE_AWS_S3:
             return cls.S3
         else:
             return cls.MINIO

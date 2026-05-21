@@ -11,6 +11,7 @@ from api.db.models import UserModel
 from api.enums import PostHogEvent
 from api.schemas.user_configuration import UserConfiguration
 from api.services.auth.stack_auth import stackauth
+from api.services.auth.supabase_auth import supabase_auth
 from api.services.configuration.registry import ServiceProviders
 from api.services.posthog_client import capture_event
 from api.utils.auth import decode_jwt_token
@@ -31,6 +32,12 @@ async def get_user(
     # ------------------------------------------------------------------
     if AUTH_PROVIDER == "local":
         return await _handle_oss_auth(authorization)
+
+    # ------------------------------------------------------------------
+    # Supabase auth mode — validate JWT locally, no HTTP call needed
+    # ------------------------------------------------------------------
+    if AUTH_PROVIDER == "supabase":
+        return await _handle_supabase_auth(authorization)
 
     # ------------------------------------------------------------------
     # 1. Validate and fetch the authenticated Stack user
@@ -157,6 +164,73 @@ async def _handle_oss_auth(authorization: str | None) -> UserModel:
         raise
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+async def _handle_supabase_auth(authorization: str | None) -> UserModel:
+    """Authenticate via Supabase JWT, then sync user+org to local DB."""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header required")
+
+    payload = supabase_auth.get_user(authorization)
+    if payload is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    supabase_user_id: str = payload["sub"]
+    email: str | None = payload.get("email")
+
+    try:
+        user_model, user_was_created = await db_client.get_or_create_user_by_provider_id(
+            supabase_user_id
+        )
+
+        if email and user_model.email != email:
+            await db_client.update_user_email(user_model.id, email)
+            user_model.email = email
+
+        if user_was_created:
+            capture_event(
+                distinct_id=supabase_user_id,
+                event=PostHogEvent.SIGNED_UP,
+                properties={"auth_provider": "supabase"},
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error creating user from database: {e}"
+        )
+
+    # Ensure org exists — use the Supabase user id as the org provider id
+    # (one org per user on first login; team invites handled separately)
+    try:
+        organization, org_was_created = (
+            await db_client.get_or_create_organization_by_provider_id(
+                org_provider_id=supabase_user_id, user_id=user_model.id
+            )
+        )
+
+        if user_model.selected_organization_id != organization.id:
+            await db_client.add_user_to_organization(user_model.id, organization.id)
+            await db_client.update_user_selected_organization(
+                user_model.id, organization.id
+            )
+            user_model.selected_organization_id = organization.id
+
+            if org_was_created:
+                existing_cfg = await db_client.get_user_configurations(user_model.id)
+                if not (existing_cfg.llm or existing_cfg.tts or existing_cfg.stt):
+                    mps_config = await create_user_configuration_with_mps_key(
+                        user_model.id, organization.id, supabase_user_id
+                    )
+                    if mps_config:
+                        await db_client.update_user_configuration(
+                            user_model.id, mps_config
+                        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to map user to organization: {exc}",
+        )
+
+    return user_model
 
 
 async def _handle_api_key_auth(api_key: str) -> UserModel:
