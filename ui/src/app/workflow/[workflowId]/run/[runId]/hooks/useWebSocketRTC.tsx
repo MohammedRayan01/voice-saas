@@ -94,9 +94,12 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
 
     // Get WebSocket URL from client configuration
     const getWebSocketUrl = useCallback(() => {
-        // Get base URL from client configuration
+        // Use dedicated WS URL env var if set (needed when frontend is on Vercel but WS must go directly to backend)
+        const wsBase = process.env.NEXT_PUBLIC_WS_URL;
+        if (wsBase) {
+            return `${wsBase}/api/v1/ws/signaling/${workflowId}/${workflowRunId}?token=${accessToken}`;
+        }
         const baseUrl = client.getConfig().baseUrl || 'http://127.0.0.1:8000';
-        // Convert HTTP to WS protocol
         const wsUrl = baseUrl.replace(/^http/, 'ws');
         return `${wsUrl}/api/v1/ws/signaling/${workflowId}/${workflowRunId}?token=${accessToken}`;
     }, [workflowId, workflowRunId, accessToken]);
