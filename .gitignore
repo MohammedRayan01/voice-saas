@@ -4,6 +4,12 @@ __pycache__
 .env.prod
 .env.test
 
+# Graphify generated outputs
+graphify_*.html
+graphify_*.json
+graphify_*.md
+.graphify/
+
 # logs and run directory on production
 /logs/
 /run/
