@@ -5,46 +5,88 @@ from loguru import logger
 
 from api.constants import MPS_API_URL
 from api.services.configuration.registry import ServiceProviders
-from pipecat.services.assemblyai.stt import AssemblyAISTTService, AssemblyAISTTSettings
-from pipecat.services.aws.llm import AWSBedrockLLMService, AWSBedrockLLMSettings
-from pipecat.services.azure.llm import AzureLLMService, AzureLLMSettings
-from pipecat.services.cartesia.stt import CartesiaSTTService
-from pipecat.services.cartesia.tts import (
-    CartesiaTTSService,
-    CartesiaTTSSettings,
-    GenerationConfig,
-)
-from pipecat.services.deepgram.flux.stt import (
-    DeepgramFluxSTTService,
-    DeepgramFluxSTTSettings,
-)
-from pipecat.services.deepgram.stt import DeepgramSTTService, DeepgramSTTSettings
-from pipecat.services.deepgram.tts import DeepgramTTSService, DeepgramTTSSettings
-from pipecat.services.dograh.llm import DograhLLMService
-from pipecat.services.dograh.stt import DograhSTTService, DograhSTTSettings
-from pipecat.services.dograh.tts import DograhTTSService, DograhTTSSettings
-from pipecat.services.elevenlabs.tts import ElevenLabsTTSService, ElevenLabsTTSSettings
-from pipecat.services.gladia.stt import GladiaSTTService, GladiaSTTSettings
-from pipecat.services.google.llm import GoogleLLMService, GoogleLLMSettings
-from pipecat.services.groq.llm import GroqLLMService, GroqLLMSettings
-from pipecat.services.openai.base_llm import OpenAILLMSettings
-from pipecat.services.openai.llm import OpenAILLMService
-from pipecat.services.openai.stt import (
-    OpenAISTTService,
-    OpenAISTTSettings,
-)
-from pipecat.services.openai.tts import OpenAITTSService, OpenAITTSSettings
-from pipecat.services.openrouter.llm import OpenRouterLLMService, OpenRouterLLMSettings
-from pipecat.services.rime.tts import RimeTTSService, RimeTTSSettings
-from pipecat.services.sarvam.stt import SarvamSTTService, SarvamSTTSettings
-from pipecat.services.sarvam.tts import SarvamTTSService, SarvamTTSSettings
-from pipecat.services.speaches.llm import SpeachesLLMService, SpeachesLLMSettings
-from pipecat.services.speaches.stt import SpeachesSTTService, SpeachesSTTSettings
-from pipecat.services.speaches.tts import SpeachesTTSService, SpeachesTTSSettings
-from pipecat.services.speechmatics.stt import (
-    SpeechmaticsSTTService,
-    SpeechmaticsSTTSettings,
-)
+# Provider imports — wrapped to avoid hard crash when optional deps missing
+try:
+    from pipecat.services.assemblyai.stt import AssemblyAISTTService, AssemblyAISTTSettings
+except Exception: AssemblyAISTTService = AssemblyAISTTSettings = None  # type: ignore
+try:
+    from pipecat.services.aws.llm import AWSBedrockLLMService, AWSBedrockLLMSettings
+except Exception: AWSBedrockLLMService = AWSBedrockLLMSettings = None  # type: ignore
+try:
+    from pipecat.services.azure.llm import AzureLLMService, AzureLLMSettings
+except Exception: AzureLLMService = AzureLLMSettings = None  # type: ignore
+try:
+    from pipecat.services.cartesia.stt import CartesiaSTTService
+except Exception: CartesiaSTTService = None  # type: ignore
+try:
+    from pipecat.services.cartesia.tts import CartesiaTTSService, CartesiaTTSSettings, GenerationConfig
+except Exception: CartesiaTTSService = CartesiaTTSSettings = GenerationConfig = None  # type: ignore
+try:
+    from pipecat.services.deepgram.flux.stt import DeepgramFluxSTTService, DeepgramFluxSTTSettings
+except Exception: DeepgramFluxSTTService = DeepgramFluxSTTSettings = None  # type: ignore
+try:
+    from pipecat.services.deepgram.stt import DeepgramSTTService, DeepgramSTTSettings
+except Exception: DeepgramSTTService = DeepgramSTTSettings = None  # type: ignore
+try:
+    from pipecat.services.deepgram.tts import DeepgramTTSService, DeepgramTTSSettings
+except Exception: DeepgramTTSService = DeepgramTTSSettings = None  # type: ignore
+try:
+    from pipecat.services.dograh.llm import DograhLLMService
+except Exception: DograhLLMService = None  # type: ignore
+try:
+    from pipecat.services.dograh.stt import DograhSTTService, DograhSTTSettings
+except Exception: DograhSTTService = DograhSTTSettings = None  # type: ignore
+try:
+    from pipecat.services.dograh.tts import DograhTTSService, DograhTTSSettings
+except Exception: DograhTTSService = DograhTTSSettings = None  # type: ignore
+try:
+    from pipecat.services.elevenlabs.tts import ElevenLabsTTSService, ElevenLabsTTSSettings
+except Exception: ElevenLabsTTSService = ElevenLabsTTSSettings = None  # type: ignore
+try:
+    from pipecat.services.gladia.stt import GladiaSTTService, GladiaSTTSettings
+except Exception: GladiaSTTService = GladiaSTTSettings = None  # type: ignore
+try:
+    from pipecat.services.google.llm import GoogleLLMService, GoogleLLMSettings
+except Exception: GoogleLLMService = GoogleLLMSettings = None  # type: ignore
+try:
+    from pipecat.services.groq.llm import GroqLLMService, GroqLLMSettings
+except Exception: GroqLLMService = GroqLLMSettings = None  # type: ignore
+try:
+    from pipecat.services.openai.base_llm import OpenAILLMSettings
+except Exception: OpenAILLMSettings = None  # type: ignore
+try:
+    from pipecat.services.openai.llm import OpenAILLMService
+except Exception: OpenAILLMService = None  # type: ignore
+try:
+    from pipecat.services.openai.stt import OpenAISTTService, OpenAISTTSettings
+except Exception: OpenAISTTService = OpenAISTTSettings = None  # type: ignore
+try:
+    from pipecat.services.openai.tts import OpenAITTSService, OpenAITTSSettings
+except Exception: OpenAITTSService = OpenAITTSSettings = None  # type: ignore
+try:
+    from pipecat.services.openrouter.llm import OpenRouterLLMService, OpenRouterLLMSettings
+except Exception: OpenRouterLLMService = OpenRouterLLMSettings = None  # type: ignore
+try:
+    from pipecat.services.rime.tts import RimeTTSService, RimeTTSSettings
+except Exception: RimeTTSService = RimeTTSSettings = None  # type: ignore
+try:
+    from pipecat.services.sarvam.stt import SarvamSTTService, SarvamSTTSettings
+except Exception: SarvamSTTService = SarvamSTTSettings = None  # type: ignore
+try:
+    from pipecat.services.sarvam.tts import SarvamTTSService, SarvamTTSSettings
+except Exception: SarvamTTSService = SarvamTTSSettings = None  # type: ignore
+try:
+    from pipecat.services.speaches.llm import SpeachesLLMService, SpeachesLLMSettings
+except Exception: SpeachesLLMService = SpeachesLLMSettings = None  # type: ignore
+try:
+    from pipecat.services.speaches.stt import SpeachesSTTService, SpeachesSTTSettings
+except Exception: SpeachesSTTService = SpeachesSTTSettings = None  # type: ignore
+try:
+    from pipecat.services.speaches.tts import SpeachesTTSService, SpeachesTTSSettings
+except Exception: SpeachesTTSService = SpeachesTTSSettings = None  # type: ignore
+try:
+    from pipecat.services.speechmatics.stt import SpeechmaticsSTTService, SpeechmaticsSTTSettings
+except Exception: SpeechmaticsSTTService = SpeechmaticsSTTSettings = None  # type: ignore
 from pipecat.transcriptions.language import Language
 from pipecat.utils.text.xml_function_tag_filter import XMLFunctionTagFilter
 

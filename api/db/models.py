@@ -513,7 +513,7 @@ class WorkflowRunModel(Base):
     transcript_url = Column(String, nullable=True)
     # Store storage backend as string enum (s3, minio)
     storage_backend = Column(
-        Enum("s3", "minio", name="storage_backend"),
+        Enum("s3", "minio", "supabase", name="storage_backend"),
         nullable=False,
         default="s3",
         server_default=text("'s3'::storage_backend"),
@@ -1141,7 +1141,7 @@ class WorkflowRecordingModel(Base):
     # Storage
     storage_key = Column(String, nullable=False)
     storage_backend = Column(
-        Enum("s3", "minio", name="recording_storage_backend"),
+        Enum("s3", "minio", "supabase", name="recording_storage_backend"),
         nullable=False,
         default="s3",
         server_default=text("'s3'::recording_storage_backend"),

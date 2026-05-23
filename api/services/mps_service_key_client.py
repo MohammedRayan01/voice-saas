@@ -552,56 +552,55 @@ class MPSServiceKeyClient:
                 response=response,
             )
 
+
     async def call_workflow_api(
         self,
         call_type: str,
         use_case: str,
         activity_description: str,
-        organization_id: Optional[int] = None,
-        created_by: Optional[str] = None,
+        organization_id=None,
+        created_by=None,
     ) -> dict:
-        """
-        Call the MPS workflow creation API using secret key authentication.
-
-        For OSS mode: Pass created_by in headers
-        For authenticated mode: Pass organization_id in headers
-
-        Args:
-            call_type: INBOUND or OUTBOUND
-            use_case: Description of the use case
-            activity_description: Description of what the agent should do
-            organization_id: Organization ID (for authenticated mode)
-            created_by: User provider ID (for OSS mode)
-
-        Returns:
-            Workflow data from MPS API
-
-        Raises:
-            HTTPException: If the API call fails
-        """
-        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
-            response = await client.post(
-                f"{self.base_url}/api/v1/workflow/create-workflow",
-                json={
-                    "call_type": call_type,
-                    "use_case": use_case,
-                    "activity_description": activity_description,
+        import re as _re
+        wf_id = _re.sub(r"[^a-z0-9_]", "_", use_case.lower())[:20] or "agent_1"
+        start_id = "start-1"
+        end_id = "end-1"
+        edge_id = "edge-start-end"
+        workflow_def = {
+            "nodes": [
+                {
+                    "id": start_id,
+                    "type": "startCall",
+                    "position": {"x": 100, "y": 200},
+                    "data": {
+                        "name": "Start Call",
+                        "is_start": True,
+                        "prompt": activity_description,
+                        "greeting": "Hello, how can I help you today?",
+                        "greeting_type": "text",
+                        "allow_interrupt": True,
+                    }
                 },
-                headers=self._get_headers(organization_id, created_by),
-            )
-
-            if response.status_code == 200:
-                return response.json()
-            else:
-                logger.error(
-                    f"Failed to create workflow: {response.status_code} - {response.text}"
-                )
-                raise httpx.HTTPStatusError(
-                    f"Failed to create workflow: {response.text}",
-                    request=response.request,
-                    response=response,
-                )
-
+                {
+                    "id": end_id,
+                    "type": "endCall",
+                    "position": {"x": 500, "y": 200},
+                    "data": {
+                        "name": "End Call",
+                        "prompt": "Thank the caller and end the call politely.",
+                    }
+                }
+            ],
+            "edges": [
+                {
+                    "id": edge_id,
+                    "source": start_id,
+                    "target": end_id,
+                    "data": {"condition": "Call ends or user says goodbye"}
+                }
+            ]
+        }
+        return {"workflow_definition": workflow_def, "workflow_id": wf_id}
 
 # Create a singleton instance
 mps_service_key_client = MPSServiceKeyClient()
