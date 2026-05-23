@@ -16,6 +16,12 @@ export default async function AfterSignInPage() {
     const user = await getServerUser();
     logger.debug('[AfterSignInPage] Got user:', { hasUser: !!user, userId: user?.id });
 
+    // For Supabase auth, no backend needed — just go to overview
+    if (authProvider === 'supabase') {
+        logger.debug('[AfterSignInPage] Supabase provider, redirecting to /overview');
+        redirect('/overview');
+    }
+
     if (authProvider === 'stack' && user && 'getAuthJson' in user) {
         logger.debug('[AfterSignInPage] Stack user detected, getting auth token...');
         const token = await user.getAuthJson();

@@ -42,8 +42,8 @@ export default function PostHogIdentify() {
                             : String(user.id);
 
                     posthog.identify(distinctId, {
-                        ...(email && { email }),
-                        ...(name && { name }),
+                        ...(email ? { email } : {}),
+                        ...(name ? { name } : {}),
                     });
                     posthog.capture(PostHogEvent.SIGNED_IN);
                 } catch (err) {

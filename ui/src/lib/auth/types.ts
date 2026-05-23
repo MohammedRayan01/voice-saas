@@ -1,5 +1,3 @@
-import type { CurrentUser } from '@stackframe/stack';
-
 // Base user interface that all providers must support
 export interface BaseUser {
   id: string;
@@ -8,17 +6,16 @@ export interface BaseUser {
   image?: string;
 }
 
-// Local/OSS user type
+// Local/OSS/Supabase user type
 export interface LocalUser extends BaseUser {
-  provider: 'local';
+  provider: 'local' | 'supabase';
   organizationId?: string;
   displayName?: string;
   provider_id?: string;
 }
 
-// Union type for all user types
-export type AuthUser = CurrentUser | LocalUser;
-
+// Union type for all user types (Stack removed — using Supabase)
+export type AuthUser = LocalUser;
 
 export interface AuthToken {
   accessToken: string;
@@ -30,11 +27,9 @@ export interface TeamPermission {
   id: string;
 }
 
-export type AuthProvider = 'stack' | 'local';
+export type AuthProvider = 'stack' | 'local' | 'supabase';
 
 export interface AuthConfig {
   provider: AuthProvider;
-  // Provider-specific configuration
   [key: string]: string | number | boolean;
 }
-

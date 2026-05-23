@@ -36,6 +36,12 @@ const LocalProviderWrapper = lazy(() =>
   }))
 );
 
+const SupabaseProviderWrapper = lazy(() =>
+  import('./SupabaseProviderWrapper').then(module => ({
+    default: module.SupabaseProviderWrapper
+  }))
+);
+
 const LoadingFallback = (
   <div className="flex items-center justify-center min-h-screen">
     <Loader2 className="w-8 h-8 animate-spin" />
@@ -73,7 +79,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // For local/OSS provider
+  // Supabase Auth provider
+  if (authProvider === 'supabase') {
+    return (
+      <Suspense fallback={LoadingFallback}>
+        <SupabaseProviderWrapper>
+          {children}
+        </SupabaseProviderWrapper>
+      </Suspense>
+    );
+  }
+
+  // For local/OSS provider (self-hosted fallback)
   return (
     <Suspense fallback={LoadingFallback}>
       <LocalProviderWrapper>

@@ -90,7 +90,7 @@ function StackAuthContextProvider({ children }: { children: React.ReactNode }) {
   const userId = stackUser?.id;
 
   const contextValue = useMemo(() => ({
-    user: userRef.current as AuthUser,
+    user: userRef.current as unknown as AuthUser,
     isAuthenticated: !!userId,
     loading: isLoading,
     getAccessToken,

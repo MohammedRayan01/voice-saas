@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-const OSS_TOKEN_COOKIE = 'dograh_auth_token';
+const OSS_TOKEN_COOKIE = 'lynq_auth_token';
 
 // Paths that don't require authentication in OSS mode
 const PUBLIC_PATHS = ['/auth/login', '/auth/signup'];
@@ -10,6 +10,13 @@ let cachedAuthProvider: string | null = null;
 
 async function fetchAuthProvider(): Promise<string> {
   if (cachedAuthProvider) {
+    return cachedAuthProvider;
+  }
+
+  // Check env var first — avoids needing backend running
+  const envProvider = process.env.NEXT_PUBLIC_AUTH_PROVIDER;
+  if (envProvider) {
+    cachedAuthProvider = envProvider;
     return cachedAuthProvider;
   }
 

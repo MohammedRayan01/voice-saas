@@ -1,13 +1,14 @@
 'use client';
 
 import { FileText, RefreshCw, Search, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import {
   deleteDocumentApiV1KnowledgeBaseDocumentsDocumentUuidDelete,
   listDocumentsApiV1KnowledgeBaseDocumentsGet,
 } from '@/client/sdk.gen';
+import { useAuth } from '@/lib/auth';
 import type { DocumentResponseSchema } from '@/client/types.gen';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -20,6 +21,8 @@ interface DocumentListProps {
 }
 
 export default function DocumentList({ refreshTrigger }: DocumentListProps) {
+  const { user, loading: authLoading } = useAuth();
+  const hasFetched = useRef(false);
   const [documents, setDocuments] = useState<DocumentResponseSchema[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -50,10 +53,13 @@ export default function DocumentList({ refreshTrigger }: DocumentListProps) {
     }
   }, []);
 
-  // Fetch documents on mount and when refreshTrigger changes
+  // Fetch documents once auth is ready, then again on refreshTrigger
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
+    if (authLoading || !user) return;
+    if (!hasFetched.current) hasFetched.current = true;
     fetchDocuments();
-  }, [fetchDocuments, refreshTrigger]);
+  }, [authLoading, user, refreshTrigger]);
 
   // Poll for documents that are processing
   useEffect(() => {

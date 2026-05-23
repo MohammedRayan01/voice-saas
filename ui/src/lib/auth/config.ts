@@ -11,6 +11,13 @@ export async function getAuthProvider(): Promise<string> {
     return cachedAuthProvider;
   }
 
+  // Allow hardcoding via env var (avoids requiring backend to be running)
+  const envProvider = process.env.NEXT_PUBLIC_AUTH_PROVIDER;
+  if (envProvider) {
+    cachedAuthProvider = envProvider;
+    return cachedAuthProvider;
+  }
+
   try {
     const backendUrl = process.env.BACKEND_URL || "http://localhost:8000";
     const res = await fetch(`${backendUrl}/api/v1/health`, {

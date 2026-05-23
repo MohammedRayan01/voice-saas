@@ -12,8 +12,8 @@ import type { LocalUser } from './types';
 // This file should only be imported in server components
 
 let stackServerApp: StackServerApp<boolean, string> | null = null;
-const OSS_TOKEN_COOKIE = 'dograh_auth_token';
-const OSS_USER_COOKIE = 'dograh_auth_user';
+const OSS_TOKEN_COOKIE = 'lynq_auth_token';
+const OSS_USER_COOKIE = 'lynq_auth_user';
 
 // Lazy load and cache the stack server app
 export async function getStackServerApp(): Promise<StackServerApp<boolean, string> | null> {
@@ -52,6 +52,33 @@ export async function getServerUser(): Promise<CurrentUser | LocalUser | null> {
         return null;
       }
     }
+  } else if (authProvider === 'supabase') {
+    // For Supabase, the session is managed client-side; server side just reads the cookie
+    const cookieStore = await cookies();
+    // Supabase stores the session in a cookie named sb-<project-ref>-auth-token
+    const supabaseCookieKey = Object.keys(Object.fromEntries(
+      (cookieStore.getAll()).map(c => [c.name, c.value])
+    )).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
+    if (supabaseCookieKey) {
+      try {
+        const raw = cookieStore.get(supabaseCookieKey)?.value ?? '';
+        const decoded = decodeURIComponent(raw);
+        const parsed = JSON.parse(decoded);
+        const u = parsed?.user ?? parsed;
+        if (u?.id) {
+          return {
+            id: u.id,
+            email: u.email,
+            name: u.user_metadata?.full_name ?? u.email,
+            provider: 'local' as const,
+            provider_id: u.id,
+          } as LocalUser;
+        }
+      } catch {
+        // cookie parse failed
+      }
+    }
+    return null;
   } else if (authProvider === 'local') {
     // For OSS mode, get user from cookies (created by middleware)
     const user = await getOSSUser();
@@ -129,6 +156,24 @@ export async function getServerAccessToken(): Promise<string | null> {
       const auth = await user.getAuthJson();
       return auth?.accessToken ?? null;
     }
+  } else if (authProvider === 'supabase') {
+    // For Supabase, read the access_token from the auth cookie
+    const cookieStore = await cookies();
+    const supabaseCookieKey = (cookieStore.getAll())
+      .map(c => c.name)
+      .find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
+    if (supabaseCookieKey) {
+      try {
+        const raw = cookieStore.get(supabaseCookieKey)?.value ?? '';
+        const decoded = decodeURIComponent(raw);
+        const parsed = JSON.parse(decoded);
+        const token = parsed?.access_token ?? null;
+        if (token) return token;
+      } catch {
+        // cookie parse failed
+      }
+    }
+    return null;
   } else if (authProvider === 'local') {
     // Get token from cookies (created by middleware)
     const oss_token = await getOSSToken();

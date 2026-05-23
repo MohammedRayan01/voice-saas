@@ -1,6 +1,5 @@
 "use client";
 
-import type { Team } from "@stackframe/stack";
 import {
   AlertTriangle,
   ArrowUpCircle,
@@ -24,7 +23,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import React, { useRef } from "react";
+import React from "react";
 
 import ThemeToggle from "@/components/ThemeSwitcher";
 import { Button } from "@/components/ui/button";
@@ -145,32 +144,15 @@ const NAV_SECTIONS: SidebarNavSection[] = [
   },
 ];
 
-// Lazy load SelectedTeamSwitcher - we'll pass selectedTeam from our context
-const StackTeamSwitcher = React.lazy(() =>
-  import("@stackframe/stack").then((mod) => ({
-    default: mod.SelectedTeamSwitcher,
-  }))
-);
-
 export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { state, isMobile, setOpenMobile } = useSidebar();
-  const { provider, getSelectedTeam, logout, user } = useAuth();
+  const { logout, user } = useAuth();
   const { config } = useAppConfig();
   const { telnyxMissingWebhookPublicKeyCount } = useTelephonyConfigWarnings();
   const hasTelephonyWarning = telnyxMissingWebhookPublicKeyCount > 0;
   const isCollapsed = !isMobile && state === "collapsed";
-
-  // Get selected team for Stack auth (cast to Team type from Stack)
-  // Stabilize the reference so SelectedTeamSwitcher only sees a change when the team ID changes,
-  // preventing unnecessary PATCH calls to Stack Auth on every route navigation.
-  const selectedTeamRef = useRef<Team | null>(null);
-  const rawSelectedTeam = provider === "stack" && getSelectedTeam ? getSelectedTeam() as Team | null : null;
-  if (rawSelectedTeam?.id !== selectedTeamRef.current?.id) {
-    selectedTeamRef.current = rawSelectedTeam;
-  }
-  const selectedTeam = selectedTeamRef.current;
 
   // Version info from app config context
   const versionInfo = config ? { ui: config.uiVersion, api: config.apiVersion } : null;
@@ -218,8 +200,8 @@ export function AppSidebar() {
         asChild
         tooltip={tooltip}
         className={cn(
-          "hover:bg-accent hover:text-accent-foreground",
-          isItemActive && "bg-accent text-accent-foreground"
+          "hover:bg-accent hover:text-accent-foreground transition-all duration-150",
+          isItemActive && "bg-accent text-primary font-medium"
         )}
       >
         <Link
@@ -255,16 +237,17 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar collapsible="icon" className="border-r">
-      <SidebarHeader className="border-b px-2 py-3 notranslate" translate="no">
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
+      <SidebarHeader className="border-b border-sidebar-border px-2 py-3 notranslate" translate="no">
         <div className="flex items-center justify-between">
           <div className={cn("flex items-center gap-2", isCollapsed && "hidden")}>
             <Link
               href="/"
-              className="notranslate flex items-center gap-2 px-2 text-xl font-bold"
+              className="notranslate flex items-center gap-2 px-2 text-xl font-bold text-primary"
               translate="no"
             >
-              Dograh
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg gradient-primary text-white text-sm font-bold shadow-sm">V</span>
+              Lynq
               {versionInfo && (
                 <span
                   className="notranslate text-xs font-normal text-muted-foreground"
@@ -278,7 +261,7 @@ export function AppSidebar() {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <a
-                    href="https://docs.dograh.com/deployment/update"
+                    href="https://docs.lynq.com/deployment/update"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 rounded-md border bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium leading-none text-amber-900 transition-opacity hover:opacity-80 dark:bg-amber-950 dark:text-amber-200"
@@ -315,22 +298,6 @@ export function AppSidebar() {
           </SidebarTrigger>
         </div>
 
-        {provider === "stack" && (
-          <div className={cn("mt-3 notranslate", isCollapsed && "hidden")} translate="no">
-            <React.Suspense
-              fallback={
-                <div className="h-9 w-full animate-pulse rounded bg-muted" />
-              }
-            >
-              <StackTeamSwitcher
-                selectedTeam={selectedTeam || undefined}
-                onChange={() => {
-                  router.refresh();
-                }}
-              />
-            </React.Suspense>
-          </div>
-        )}
       </SidebarHeader>
 
       <SidebarContent className={cn("notranslate", isCollapsed && "px-0")} translate="no">
@@ -366,92 +333,48 @@ export function AppSidebar() {
         translate="no"
       >
         <div className="space-y-2">
-          {provider !== "stack" && (
-            <div className={cn("flex", isCollapsed ? "justify-center" : "justify-start")}>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 cursor-pointer rounded-full">
-                    <span className="text-xs font-medium">
-                      {(user?.displayName || (user as LocalUser | undefined)?.email || "")
-                        .split(/[\s@]/)
-                        .filter(Boolean)
-                        .slice(0, 2)
-                        .map((s: string) => s[0]?.toUpperCase())
-                        .join("")
-                        || "U"}
-                    </span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent side="top" align="start" className="w-56">
-                  <DropdownMenuLabel className="font-normal">
-                    <div className="flex flex-col space-y-1">
-                      {(user as LocalUser | undefined)?.email && (
-                        <p className="text-xs text-muted-foreground">{(user as LocalUser).email}</p>
-                      )}
-                    </div>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => router.push("/settings")} className="cursor-pointer">
-                    <Settings className="mr-2 h-4 w-4" />
-                    Platform Settings
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => logout()} className="cursor-pointer">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Sign out
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          )}
-
-          {provider === "stack" && (
-            <div className={cn("flex", isCollapsed ? "justify-center" : "justify-start")}>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 cursor-pointer rounded-full">
-                    <span className="text-xs font-medium">
-                      {(user?.displayName || (user as { primaryEmail?: string })?.primaryEmail || "")
-                        .split(/[\s@]/)
-                        .filter(Boolean)
-                        .slice(0, 2)
-                        .map((s: string) => s[0]?.toUpperCase())
-                        .join("")
-                        || "U"}
-                    </span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent side="top" align="start" className="w-56">
-                  <DropdownMenuLabel className="font-normal">
-                    <div className="flex flex-col space-y-1">
-                      {user?.displayName && (
-                        <p className="text-sm font-medium">{user.displayName}</p>
-                      )}
-                      {(user as { primaryEmail?: string })?.primaryEmail && (
-                        <p className="text-xs text-muted-foreground">{(user as { primaryEmail?: string }).primaryEmail}</p>
-                      )}
-                    </div>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => router.push("/handler/account-settings")} className="cursor-pointer">
-                    <Settings className="mr-2 h-4 w-4" />
-                    Account settings
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => router.push("/settings")} className="cursor-pointer">
-                    <Settings className="mr-2 h-4 w-4" />
-                    Platform Settings
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => router.push("/usage")} className="cursor-pointer">
-                    <CircleDollarSign className="mr-2 h-4 w-4" />
-                    Usage
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => logout()} className="cursor-pointer">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Sign out
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          )}
+          <div className={cn("flex", isCollapsed ? "justify-center" : "justify-start")}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 cursor-pointer rounded-full bg-accent text-primary hover:bg-accent/80">
+                  <span className="text-xs font-semibold">
+                    {((user as LocalUser | undefined)?.displayName || (user as LocalUser | undefined)?.email || "")
+                      .split(/[\s@]/)
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map((s: string) => s[0]?.toUpperCase())
+                      .join("") || "U"}
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="top" align="start" className="w-56">
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-0.5">
+                    {(user as LocalUser | undefined)?.displayName && (
+                      <p className="text-sm font-medium">{(user as LocalUser).displayName}</p>
+                    )}
+                    {(user as LocalUser | undefined)?.email && (
+                      <p className="text-xs text-muted-foreground">{(user as LocalUser).email}</p>
+                    )}
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => router.push("/settings")} className="cursor-pointer">
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => router.push("/usage")} className="cursor-pointer">
+                  <CircleDollarSign className="mr-2 h-4 w-4" />
+                  Usage
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => logout()} className="cursor-pointer text-destructive focus:text-destructive">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
 
           <div className={cn("mt-2 border-t pt-2", isCollapsed && "flex justify-center")}>
             {isCollapsed ? (

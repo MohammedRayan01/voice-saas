@@ -1,7 +1,7 @@
 "use client";
 
 import { AudioLines, Check, Pause, Pencil, Play, RefreshCw, Search, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -14,9 +14,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAudioPlayback } from "@/hooks/useAudioPlayback";
+import { useAuth } from "@/lib/auth";
 import logger from "@/lib/logger";
 
 export default function RecordingsList({ refreshKey }: { refreshKey?: number }) {
+    const { user, loading: authLoading } = useAuth();
+    const hasFetched = useRef(false);
     const [recordings, setRecordings] = useState<RecordingResponseSchema[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
@@ -51,9 +54,12 @@ export default function RecordingsList({ refreshKey }: { refreshKey?: number }) 
         }
     }, []);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
+        if (authLoading || !user) return;
+        hasFetched.current = true;
         fetchRecordings();
-    }, [fetchRecordings, refreshKey]);
+    }, [authLoading, user, refreshKey]);
 
     const handleDelete = async (recordingId: string) => {
         if (!confirm("Are you sure you want to delete this recording?")) return;
