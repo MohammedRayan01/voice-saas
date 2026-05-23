@@ -35,10 +35,17 @@ export function setupAuthInterceptor(apiClient: Client, getAccessToken: () => Pr
         }
         try {
             const token = await getAccessToken();
-            request.headers.set('Authorization', `Bearer ${token}`);
+            if (token) {
+                request.headers.set('Authorization', `Bearer ${token}`);
+            }
         } catch {
             // If token retrieval fails, let the request proceed without auth
         }
         return request;
     });
+}
+
+/** Call this to force re-registration on next setupAuthInterceptor call (e.g. after logout/login). */
+export function resetAuthInterceptor() {
+    interceptorRegistered = false;
 }

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 
+import { resetAuthInterceptor } from '@/lib/apiClient';
 import logger from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 
@@ -28,7 +29,10 @@ export function SupabaseProviderWrapper({ children }: { children: React.ReactNod
     });
 
     // Listen for auth state changes (sign in, sign out, token refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN') {
+        resetAuthInterceptor();
+      }
       if (session?.user) {
         setUser({
           id: session.user.id,
