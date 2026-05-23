@@ -7,6 +7,7 @@ import { Suspense } from "react";
 import { MCPSection } from "@/components/MCPSection";
 import { TelemetrySection } from "@/components/TelemetrySection";
 import { BillingSection } from "@/components/settings/BillingSection";
+import { PricingCalculator } from "@/components/settings/PricingCalculator";
 import { TeamSection } from "@/components/settings/TeamSection";
 import { WebhooksSection } from "@/components/settings/WebhooksSection";
 import { WidgetSection } from "@/components/settings/WidgetSection";
@@ -16,6 +17,7 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { id: "team", label: "Team" },
   { id: "billing", label: "Billing" },
+  { id: "calculator", label: "Cost Calculator" },
   { id: "webhooks", label: "Webhooks" },
   { id: "widget", label: "Widget" },
   { id: "platform", label: "Platform" },
@@ -60,6 +62,7 @@ function SettingsContent() {
       {/* Tab content */}
       {activeTab === "team" && <TeamSection />}
       {activeTab === "billing" && <BillingSection />}
+      {activeTab === "calculator" && <PricingCalculator />}
       {activeTab === "webhooks" && <WebhooksSection />}
       {activeTab === "widget" && <WidgetSection />}
       {activeTab === "platform" && (
