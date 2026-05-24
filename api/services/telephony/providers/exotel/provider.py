@@ -213,16 +213,11 @@ class ExotelProvider(TelephonyProvider):
         normalized_data,
         backend_endpoint: str,
     ):
-        from fastapi import Response
+        from fastapi.responses import JSONResponse
 
-        exo_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Connect>
-        <Stream url="{websocket_url}">
-        </Stream>
-    </Connect>
-</Response>"""
-        return Response(content=exo_xml, media_type="application/xml")
+        # Exotel dynamic voicebot mode: respond with JSON {"url": "wss://..."}
+        # Exotel then opens the WebSocket to that URL.
+        return JSONResponse({"url": websocket_url})
 
     @staticmethod
     def generate_error_response(error_type: str, message: str) -> tuple:
@@ -253,19 +248,19 @@ class ExotelProvider(TelephonyProvider):
 
     @classmethod
     def can_handle_webhook(cls, webhook_data: Dict[str, Any], headers: Dict[str, str]) -> bool:
-        # Exotel sends CallSid in its webhook payloads
-        return "CallSid" in webhook_data and "AccountSid" in webhook_data
+        # Exotel sends CallSid + CallFrom/CallTo in its webhook payloads
+        return "CallSid" in webhook_data and ("CallFrom" in webhook_data or "CallTo" in webhook_data)
 
     @staticmethod
     def parse_inbound_webhook(webhook_data: Dict[str, Any]) -> NormalizedInboundData:
-        from_raw = webhook_data.get("From", "")
-        to_raw = webhook_data.get("To", "")
+        from_raw = webhook_data.get("CallFrom") or webhook_data.get("From", "")
+        to_raw = webhook_data.get("CallTo") or webhook_data.get("To", "")
         return NormalizedInboundData(
             provider=ExotelProvider.PROVIDER_NAME,
             call_id=webhook_data.get("CallSid", "") or webhook_data.get("Sid", ""),
             from_number=normalize_telephony_address(from_raw).canonical if from_raw else "",
             to_number=normalize_telephony_address(to_raw).canonical if to_raw else "",
-            direction=webhook_data.get("Direction", ""),
+            direction=(webhook_data.get("Direction") or "inbound").lower(),
             call_status=webhook_data.get("Status", "") or webhook_data.get("CallStatus", ""),
             account_id=webhook_data.get("AccountSid"),
             raw_data=webhook_data,

@@ -13,7 +13,6 @@ from api.services.telephony.status_processor import (
     StatusCallbackRequest,
     _process_status_update,
 )
-from api.utils.common import get_backend_endpoints
 
 router = APIRouter()
 
@@ -22,27 +21,25 @@ router = APIRouter()
 async def handle_exotel_answer(
     workflow_id: int, user_id: int, workflow_run_id: int, organization_id: int
 ):
-    """Answer URL called by Exotel when a call connects. Returns ExoML."""
+    """Answer URL for outbound calls. Returns ExoML."""
     workflow_run = await db_client.get_workflow_run_by_id(workflow_run_id)
     provider = await get_telephony_provider_for_run(workflow_run, organization_id)
-
-    response_content = await provider.get_webhook_response(
-        workflow_id, user_id, workflow_run_id
-    )
+    response_content = await provider.get_webhook_response(workflow_id, user_id, workflow_run_id)
     return HTMLResponse(content=response_content, media_type="application/xml")
 
 
-@router.post("/exotel/status-callback/{workflow_run_id}")
+@router.api_route("/exotel/status-callback/{workflow_run_id}", methods=["GET", "POST"])
 async def handle_exotel_status_callback(workflow_run_id: int, request: Request):
     """Status callback sent by Exotel at call state changes."""
     set_current_run_id(workflow_run_id)
 
-    form_data = await request.form()
-    callback_data = dict(form_data)
+    if request.method == "GET":
+        callback_data = dict(request.query_params)
+    else:
+        form_data = await request.form()
+        callback_data = dict(form_data)
 
-    logger.info(
-        f"[run {workflow_run_id}] Exotel status callback: {json.dumps(callback_data)}"
-    )
+    logger.info(f"[run {workflow_run_id}] Exotel status callback: {json.dumps(callback_data)}")
 
     workflow_run = await db_client.get_workflow_run_by_id(workflow_run_id)
     if not workflow_run:
@@ -67,5 +64,4 @@ async def handle_exotel_status_callback(workflow_run_id: int, request: Request):
             extra=parsed_data.get("extra", {}),
         ),
     )
-
     return {"status": "success"}
