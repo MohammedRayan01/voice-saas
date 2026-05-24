@@ -27,6 +27,7 @@ from api.services.pipecat.audio_playback import play_audio, play_audio_loop
 from api.services.telephony.call_transfer_manager import get_call_transfer_manager
 from api.services.telephony.factory import get_telephony_provider_for_run
 from api.services.telephony.transfer_event_protocol import TransferContext
+from api.services.integrations.google_calendar import client as gcal
 from api.services.workflow.tools.calculator import get_calculator_tools, safe_calculator
 from api.services.workflow.tools.custom_tool import (
     execute_http_tool,
@@ -162,6 +163,10 @@ class CustomToolManager:
                         )
                     continue
 
+                if tool.category == ToolCategory.GOOGLE_CALENDAR.value:
+                    schemas.extend(self._get_google_calendar_schemas())
+                    continue
+
                 if tool.category == ToolCategory.MCP.value:
                     session = self._engine._mcp_sessions.get(tool.tool_uuid)
                     if session is None or not session.available:
@@ -234,6 +239,11 @@ class CustomToolManager:
                     )
                     continue
 
+                if tool.category == ToolCategory.GOOGLE_CALENDAR.value:
+                    await self._register_google_calendar_handlers()
+                    logger.debug(f"Registered Google Calendar handlers (tool_uuid: {tool.tool_uuid})")
+                    continue
+
                 if tool.category == ToolCategory.MCP.value:
                     session = self._engine._mcp_sessions.get(tool.tool_uuid)
                     if session is None or not session.available:
@@ -300,6 +310,116 @@ class CustomToolManager:
             handler = self._create_http_tool_handler(tool, function_name)
 
         return handler, timeout_secs
+
+    def _get_google_calendar_schemas(self) -> list[FunctionSchema]:
+        return [
+            get_function_schema(
+                "check_availability",
+                "Check available appointment slots on a given date.",
+                properties={
+                    "date": {"type": "string", "description": "Date in ISO format (YYYY-MM-DD)"},
+                    "duration_minutes": {"type": "integer", "description": "Slot duration in minutes (default 30)"},
+                },
+                required=["date"],
+            ),
+            get_function_schema(
+                "book_appointment",
+                "Book an appointment on the calendar.",
+                properties={
+                    "start_time": {"type": "string", "description": "Start datetime in ISO format"},
+                    "end_time": {"type": "string", "description": "End datetime in ISO format"},
+                    "summary": {"type": "string", "description": "Title/summary for the appointment"},
+                    "description": {"type": "string", "description": "Optional details"},
+                    "attendee_email": {"type": "string", "description": "Optional attendee email"},
+                },
+                required=["start_time", "end_time", "summary"],
+            ),
+            get_function_schema(
+                "cancel_appointment",
+                "Cancel an existing appointment by its event ID.",
+                properties={
+                    "event_id": {"type": "string", "description": "Google Calendar event ID to cancel"},
+                },
+                required=["event_id"],
+            ),
+        ]
+
+    async def _register_google_calendar_handlers(self) -> None:
+        organization_id = await self.get_organization_id()
+
+        async def check_availability_handler(function_call_params: FunctionCallParams) -> None:
+            logger.info(f"Google Calendar check_availability called: {function_call_params.arguments}")
+            try:
+                date = function_call_params.arguments.get("date", "")
+                duration = function_call_params.arguments.get("duration_minutes", 30)
+                slots = await gcal.check_availability(organization_id, date, duration)
+                if slots:
+                    await function_call_params.result_callback({
+                        "available": True,
+                        "slots": slots[:10],
+                        "count": len(slots),
+                    })
+                else:
+                    await function_call_params.result_callback({
+                        "available": False,
+                        "message": "No available slots found for that date.",
+                    })
+            except Exception as e:
+                logger.error(f"check_availability failed: {e}")
+                await function_call_params.result_callback({"error": str(e)})
+
+        async def book_appointment_handler(function_call_params: FunctionCallParams) -> None:
+            logger.info(f"Google Calendar book_appointment called: {function_call_params.arguments}")
+            try:
+                args = function_call_params.arguments
+                result = await gcal.book_appointment(
+                    organization_id,
+                    start_iso=args["start_time"],
+                    end_iso=args["end_time"],
+                    summary=args["summary"],
+                    description=args.get("description", ""),
+                    attendee_email=args.get("attendee_email"),
+                )
+                if result:
+                    await function_call_params.result_callback({
+                        "success": True,
+                        "event_id": result["event_id"],
+                        "summary": result["summary"],
+                        "start": result["start"],
+                        "end": result["end"],
+                        "message": f"Appointment booked successfully for {result['start']}.",
+                    })
+                else:
+                    await function_call_params.result_callback({
+                        "success": False,
+                        "message": "Failed to book appointment. Please try a different time.",
+                    })
+            except Exception as e:
+                logger.error(f"book_appointment failed: {e}")
+                await function_call_params.result_callback({"error": str(e)})
+
+        async def cancel_appointment_handler(function_call_params: FunctionCallParams) -> None:
+            logger.info(f"Google Calendar cancel_appointment called: {function_call_params.arguments}")
+            try:
+                event_id = function_call_params.arguments.get("event_id", "")
+                success = await gcal.cancel_appointment(organization_id, event_id)
+                if success:
+                    await function_call_params.result_callback({
+                        "success": True,
+                        "message": "Appointment cancelled successfully.",
+                    })
+                else:
+                    await function_call_params.result_callback({
+                        "success": False,
+                        "message": "Could not cancel the appointment. It may not exist.",
+                    })
+            except Exception as e:
+                logger.error(f"cancel_appointment failed: {e}")
+                await function_call_params.result_callback({"error": str(e)})
+
+        self._engine.llm.register_function("check_availability", check_availability_handler)
+        self._engine.llm.register_function("book_appointment", book_appointment_handler)
+        self._engine.llm.register_function("cancel_appointment", cancel_appointment_handler)
 
     def _register_calculator_handler(self) -> None:
         """Register the built-in calculator function with the LLM."""

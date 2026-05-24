@@ -1,10 +1,12 @@
 """API routes for knowledge base operations."""
 
+import io
 import uuid
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger
+from pydantic import BaseModel
 
 from api.db import db_client
 from api.enums import PostHogEvent
@@ -425,6 +427,102 @@ async def search_chunks(
             query=request.query,
             total_results=len(chunks),
         )
+
+
+class FAQEntry(BaseModel):
+    question: str
+    answer: str
+
+
+class FAQRequest(BaseModel):
+    entries: list[FAQEntry]
+
+
+@router.post("/faq", response_model=DocumentResponseSchema, summary="Save FAQ entries to knowledge base")
+async def save_faq(
+    request: FAQRequest,
+    user=Depends(get_user),
+):
+    """Save FAQ Q&A pairs as a searchable knowledge base document.
+
+    Formats entries as plain text, uploads to storage, and processes through
+    the standard document pipeline (chunking + embeddings).
+    Replaces any existing FAQ document for this organisation.
+    """
+    if not request.entries:
+        raise HTTPException(status_code=400, detail="At least one FAQ entry is required")
+
+    org_id = user.selected_organization_id
+    FAQ_FILENAME = "__faq_sheet__.txt"
+
+    # Format Q&A pairs as plain text
+    lines = []
+    for entry in request.entries:
+        lines.append(f"Q: {entry.question.strip()}")
+        lines.append(f"A: {entry.answer.strip()}")
+        lines.append("")
+    faq_text = "\n".join(lines).strip()
+
+    # Delete existing FAQ document if present
+    existing_docs = await db_client.get_documents_for_organization(org_id, limit=200)
+    for doc in existing_docs:
+        if doc.filename == FAQ_FILENAME:
+            await db_client.delete_document(str(doc.document_uuid), org_id)
+
+    # Upload text to storage
+    document_uuid_str = str(uuid.uuid4())
+    s3_key = f"knowledge_base/{org_id}/{document_uuid_str}/{FAQ_FILENAME}"
+    content_bytes = faq_text.encode("utf-8")
+    upload_ok = await storage_fs.acreate_file(s3_key, io.BytesIO(content_bytes))
+    if not upload_ok:
+        raise HTTPException(status_code=500, detail="Failed to upload FAQ to storage")
+
+    # Create document record
+    document = await db_client.create_document(
+        organization_id=org_id,
+        created_by=user.id,
+        filename=FAQ_FILENAME,
+        file_size_bytes=len(content_bytes),
+        file_hash="",
+        mime_type="text/plain",
+        custom_metadata={"s3_key": s3_key, "faq": True},
+        document_uuid=document_uuid_str,
+        retrieval_mode="chunked",
+    )
+
+    # Enqueue processing
+    await enqueue_job(
+        FunctionNames.PROCESS_KNOWLEDGE_BASE_DOCUMENT,
+        document.id,
+        s3_key,
+        org_id,
+        str(user.provider_id),
+        128,
+        "chunked",
+    )
+
+    logger.info(f"FAQ document created (id={document.id}) for org {org_id} with {len(request.entries)} entries")
+
+    return DocumentResponseSchema(
+        id=document.id,
+        document_uuid=document.document_uuid,
+        filename=FAQ_FILENAME,
+        file_size_bytes=len(content_bytes),
+        file_hash="",
+        mime_type="text/plain",
+        processing_status="pending",
+        processing_error=None,
+        total_chunks=0,
+        retrieval_mode="chunked",
+        custom_metadata={"s3_key": s3_key, "faq": True},
+        docling_metadata={},
+        source_url=None,
+        created_at=document.created_at,
+        updated_at=document.updated_at,
+        organization_id=org_id,
+        created_by=user.id,
+        is_active=True,
+    )
 
     except Exception as exc:
         logger.error(f"Error searching chunks: {exc}")
