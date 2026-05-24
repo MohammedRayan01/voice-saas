@@ -1,6 +1,7 @@
 from typing import Any, BinaryIO, Dict, Optional
 
 import aioboto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from .base import BaseFileSystem
@@ -26,7 +27,10 @@ class S3FileSystem(BaseFileSystem):
         )
 
     def _client(self):
-        kwargs = {"region_name": self.region_name}
+        kwargs = {
+            "region_name": self.region_name,
+            "config": Config(signature_version="s3v4"),
+        }
         if self.endpoint_url:
             kwargs["endpoint_url"] = self.endpoint_url
         return self.session.client("s3", **kwargs)
