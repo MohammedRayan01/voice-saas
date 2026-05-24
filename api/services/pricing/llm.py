@@ -140,4 +140,43 @@ LLM_PRICING: Dict[str, Dict[str, TokenPricingModel]] = {
             / 1000000,  # $1.60 per 1M tokens if using data zone
         )
     },
+    ServiceProviders.GOOGLE: {
+        # Gemini 2.0 Flash Live (multimodal live / realtime)
+        "gemini-2.0-flash-live-001": TokenPricingModel(
+            prompt_token_price=Decimal("0.50") / 1000000,   # $0.50 per 1M tokens
+            completion_token_price=Decimal("2.00") / 1000000,  # $2.00 per 1M tokens
+        ),
+        "gemini-2.0-flash-exp": TokenPricingModel(
+            prompt_token_price=Decimal("0.50") / 1000000,
+            completion_token_price=Decimal("2.00") / 1000000,
+        ),
+        # Gemini 2.5 Flash
+        "gemini-2.5-flash-preview-05-20": TokenPricingModel(
+            prompt_token_price=Decimal("0.15") / 1000000,   # $0.15 per 1M tokens
+            completion_token_price=Decimal("0.60") / 1000000,  # $0.60 per 1M tokens
+        ),
+        "gemini-2.5-flash": TokenPricingModel(
+            prompt_token_price=Decimal("0.15") / 1000000,
+            completion_token_price=Decimal("0.60") / 1000000,
+        ),
+        # Gemini 2.0 Flash
+        "gemini-2.0-flash": TokenPricingModel(
+            prompt_token_price=Decimal("0.10") / 1000000,   # $0.10 per 1M tokens
+            completion_token_price=Decimal("0.40") / 1000000,  # $0.40 per 1M tokens
+        ),
+        # Gemini 1.5 Flash
+        "gemini-1.5-flash": TokenPricingModel(
+            prompt_token_price=Decimal("0.075") / 1000000,
+            completion_token_price=Decimal("0.30") / 1000000,
+        ),
+        "gemini-1.5-flash-8b": TokenPricingModel(
+            prompt_token_price=Decimal("0.0375") / 1000000,
+            completion_token_price=Decimal("0.15") / 1000000,
+        ),
+        # Gemini 1.5 Pro
+        "gemini-1.5-pro": TokenPricingModel(
+            prompt_token_price=Decimal("1.25") / 1000000,
+            completion_token_price=Decimal("5.00") / 1000000,
+        ),
+    },
 }

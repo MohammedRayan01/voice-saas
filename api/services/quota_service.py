@@ -1,7 +1,7 @@
-"""Quota checking service for Dograh credits.
+"""Quota checking service.
 
-This module provides reusable quota checking functionality that can be used
-across different endpoints (WebRTC signaling, telephony, public API triggers).
+Provides quota / usage-limit checking used across WebRTC, telephony, and
+public API trigger endpoints.
 """
 
 from dataclasses import dataclass
@@ -128,6 +128,44 @@ async def check_dograh_quota(
     except Exception as e:
         logger.error(f"Error during quota check: {str(e)}")
         # On unexpected error, allow the call to proceed
+        return QuotaCheckResult(has_quota=True)
+
+
+async def check_minutes_limit(organization_id: int) -> QuotaCheckResult:
+    """Check if an organization has remaining call minutes.
+
+    Returns has_quota=True if no limit is set or limit not yet reached.
+    Blocks new calls (has_quota=False) when total_duration_seconds for the
+    current billing cycle >= minutes_limit * 60.
+    """
+    try:
+        org = await db_client.get_organization_by_id(organization_id)
+        if not org or org.minutes_limit is None:
+            return QuotaCheckResult(has_quota=True)
+
+        limit_seconds = org.minutes_limit * 60
+        cycle = await db_client.get_or_create_current_cycle(organization_id)
+        used_seconds = cycle.total_duration_seconds if cycle else 0
+
+        if used_seconds >= limit_seconds:
+            used_minutes = used_seconds // 60
+            logger.warning(
+                f"Minutes limit exceeded for org {organization_id}: "
+                f"{used_minutes}/{org.minutes_limit} minutes used"
+            )
+            return QuotaCheckResult(
+                has_quota=False,
+                error_code="minutes_limit_exceeded",
+                error_message=(
+                    f"Your organisation has used {used_minutes} of {org.minutes_limit} "
+                    "allotted minutes this billing period. Upgrade your plan to continue making calls."
+                ),
+            )
+
+        return QuotaCheckResult(has_quota=True)
+
+    except Exception as e:
+        logger.error(f"Error checking minutes limit for org {organization_id}: {e}")
         return QuotaCheckResult(has_quota=True)
 
 

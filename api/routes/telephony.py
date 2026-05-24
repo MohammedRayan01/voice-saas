@@ -25,7 +25,7 @@ from api.enums import CallType, WorkflowRunState
 from api.errors.telephony_errors import TelephonyError
 from api.sdk_expose import sdk_expose
 from api.services.auth.depends import get_user
-from api.services.quota_service import check_dograh_quota, check_dograh_quota_by_user_id
+from api.services.quota_service import check_dograh_quota, check_dograh_quota_by_user_id, check_minutes_limit
 from api.services.telephony.call_transfer_manager import get_call_transfer_manager
 from api.services.telephony.factory import (
     get_all_telephony_providers,
@@ -112,6 +112,10 @@ async def initiate_call(
     quota_result = await check_dograh_quota(user, workflow_id=request.workflow_id)
     if not quota_result.has_quota:
         raise HTTPException(status_code=402, detail=quota_result.error_message)
+
+    minutes_result = await check_minutes_limit(user.selected_organization_id)
+    if not minutes_result.has_quota:
+        raise HTTPException(status_code=402, detail=minutes_result.error_message)
 
     # Determine the workflow run mode based on provider type
     workflow_run_mode = provider.PROVIDER_NAME

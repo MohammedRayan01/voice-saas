@@ -22,7 +22,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from api.db import db_client
 from api.enums import CallType, WorkflowRunState
-from api.services.quota_service import check_dograh_quota_by_user_id
+from api.services.quota_service import check_dograh_quota_by_user_id, check_minutes_limit
 from api.services.telephony import registry as telephony_registry
 
 router = APIRouter(prefix="/agent-stream")
@@ -79,6 +79,16 @@ async def agent_stream_websocket(
             code=1008, reason=quota_result.error_message or "Quota exceeded"
         )
         return
+
+    if workflow.organization_id:
+        minutes_result = await check_minutes_limit(workflow.organization_id)
+        if not minutes_result.has_quota:
+            logger.warning(
+                f"agent-stream minutes limit exceeded for org {workflow.organization_id}: "
+                f"{minutes_result.error_message}"
+            )
+            await websocket.close(code=1008, reason=minutes_result.error_message)
+            return
 
     numeric_suffix = int(str(uuid.uuid4()).replace("-", "")[:8], 16) % 100000000
     workflow_run_name = f"WR-AGS-{numeric_suffix:08d}"

@@ -10,6 +10,7 @@ import {
   CircleDollarSign,
   Database,
   FileText,
+  Flame,
   Home,
   Key,
   LogOut,
@@ -120,6 +121,11 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         title: "Contacts",
         url: "/contacts",
         icon: Users,
+      },
+      {
+        title: "Escalations",
+        url: "/escalations",
+        icon: Flame,
       },
       {
         title: "Recordings",

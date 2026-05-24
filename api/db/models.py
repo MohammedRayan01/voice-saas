@@ -1266,6 +1266,24 @@ class KnowledgeBaseChunkModel(Base):
     )
 
 
+class EscalationModel(Base):
+    __tablename__ = "escalations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    workflow_run_id = Column(Integer, ForeignKey("workflow_runs.id", ondelete="SET NULL"), nullable=True, index=True)
+    query = Column(Text, nullable=False)
+    answer = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default="pending")  # pending | resolved | dismissed
+    add_to_kb = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_escalations_org_status", "organization_id", "status"),
+    )
+
+
 class ContactModel(Base):
     __tablename__ = "contacts"
 
