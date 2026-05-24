@@ -105,11 +105,7 @@ async def get_current_period_usage(user: UserModel = Depends(get_user)):
 
 @router.get("/usage/mps-credits", response_model=MPSCreditsResponse)
 async def get_mps_credits(user: UserModel = Depends(get_user)):
-    """Get aggregated usage and quota from MPS.
-
-    OSS users: queries by provider_id (created_by).
-    Hosted users: queries by organization_id.
-    """
+    """Get aggregated usage and quota. Returns zeroes when MPS is not configured."""
     try:
         if DEPLOYMENT_MODE == "oss":
             usage = await mps_service_key_client.get_usage_by_created_by(
@@ -132,9 +128,12 @@ async def get_mps_credits(user: UserModel = Depends(get_user)):
         )
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Failed to fetch MPS credits: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        return MPSCreditsResponse(
+            total_credits_used=0.0,
+            remaining_credits=0.0,
+            total_quota=0.0,
+        )
 
 
 FILTERS_DESCRIPTION = """\
