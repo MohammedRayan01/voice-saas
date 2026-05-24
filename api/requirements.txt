@@ -22,3 +22,6 @@ tuner-pipecat-sdk==0.2.0
 PyNaCl==1.6.2
 
 PyJWT==2.10.1
+pypdf>=6.0.0
+python-docx>=1.0.0
+tiktoken>=0.7.0

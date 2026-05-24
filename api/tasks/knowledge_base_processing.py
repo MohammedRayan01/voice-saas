@@ -1,22 +1,81 @@
-"""ARQ background task for processing knowledge base documents.
+"""Background task for processing knowledge base documents locally.
 
-Document conversion and chunking live in the Model Proxy Service (MPS);
-this task downloads the file from S3, calls MPS, then handles the embedding
-and DB writes locally.
+Downloads the file from storage, extracts text using local parsers,
+chunks it, embeds via OpenAI, and stores in the database.
+Supports: PDF, DOCX, DOC, TXT, JSON.
 """
 
+import json
 import os
 import tempfile
 
+import tiktoken
 from loguru import logger
 
 from api.db import db_client
 from api.db.models import KnowledgeBaseChunkModel
 from api.services.gen_ai import OpenAIEmbeddingService
-from api.services.mps_service_key_client import mps_service_key_client
 from api.services.storage import storage_fs
 
-MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024
+MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5MB
+DEFAULT_CHUNK_TOKENS = 256
+CHUNK_OVERLAP_TOKENS = 32
+
+
+def _extract_text(file_path: str, filename: str) -> str:
+    """Extract plain text from a file based on its extension."""
+    ext = os.path.splitext(filename)[1].lower()
+
+    if ext == ".pdf":
+        from pypdf import PdfReader
+        reader = PdfReader(file_path)
+        pages = []
+        for page in reader.pages:
+            text = page.extract_text()
+            if text:
+                pages.append(text.strip())
+        return "\n\n".join(pages)
+
+    elif ext in (".docx",):
+        from docx import Document
+        doc = Document(file_path)
+        paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+        return "\n\n".join(paragraphs)
+
+    elif ext == ".json":
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            data = json.load(f)
+        return json.dumps(data, indent=2, ensure_ascii=False)
+
+    else:
+        # TXT, DOC (fallback), and anything else — read as plain text
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            return f.read()
+
+
+def _chunk_text(text: str, max_tokens: int = DEFAULT_CHUNK_TOKENS, overlap: int = CHUNK_OVERLAP_TOKENS) -> list[dict]:
+    """Split text into overlapping token-bounded chunks."""
+    enc = tiktoken.get_encoding("cl100k_base")
+    tokens = enc.encode(text)
+
+    chunks = []
+    start = 0
+    idx = 0
+    while start < len(tokens):
+        end = min(start + max_tokens, len(tokens))
+        chunk_tokens = tokens[start:end]
+        chunk_text = enc.decode(chunk_tokens).strip()
+        if chunk_text:
+            chunks.append({
+                "chunk_index": idx,
+                "chunk_text": chunk_text,
+                "token_count": len(chunk_tokens),
+                "chunk_metadata": {"start_token": start, "end_token": end},
+            })
+            idx += 1
+        start += max_tokens - overlap
+
+    return chunks
 
 
 async def process_knowledge_base_document(
@@ -25,19 +84,13 @@ async def process_knowledge_base_document(
     s3_key: str,
     organization_id: int,
     created_by_provider_id: str,
-    max_tokens: int = 128,
+    max_tokens: int = DEFAULT_CHUNK_TOKENS,
     retrieval_mode: str = "chunked",
 ):
-    """Process a knowledge base document via MPS: download, call MPS, embed, store.
+    """Download, parse, chunk, embed, and store a knowledge base document.
 
-    Args:
-        ctx: ARQ context
-        document_id: Database ID of the document
-        s3_key: S3 key where the file is stored
-        organization_id: Organization ID
-        created_by_provider_id: Uploading user's provider ID (for OSS-mode auth to MPS)
-        max_tokens: Maximum number of tokens per chunk (default: 128)
-        retrieval_mode: "chunked" for vector search or "full_document" for full text
+    All processing is local — no external services required.
+    Embeddings use the user's configured OpenAI key (chunked mode only).
     """
     logger.info(
         f"Processing knowledge base document: document_id={document_id}, "
@@ -56,10 +109,10 @@ async def process_knowledge_base_document(
         temp_file_path = temp_file.name
         temp_file.close()
 
-        logger.info(f"Downloading file from S3: {s3_key}")
+        logger.info(f"Downloading file from storage: {s3_key}")
         download_success = await storage_fs.adownload_file(s3_key, temp_file_path)
         if not download_success:
-            raise Exception(f"Failed to download file from S3: {s3_key}")
+            raise Exception(f"Failed to download file from storage: {s3_key}")
         if not os.path.exists(temp_file_path):
             raise FileNotFoundError(f"Downloaded file not found: {temp_file_path}")
 
@@ -71,10 +124,7 @@ async def process_knowledge_base_document(
                 f"File size ({file_size / (1024 * 1024):.1f}MB) exceeds the "
                 f"maximum allowed size of {MAX_FILE_SIZE_BYTES // (1024 * 1024)}MB."
             )
-            logger.warning(f"Document {document_id}: {error_message}")
-            await db_client.update_document_status(
-                document_id, "failed", error_message=error_message
-            )
+            await db_client.update_document_status(document_id, "failed", error_message=error_message)
             return
 
         file_hash = db_client.compute_file_hash(temp_file_path)
@@ -84,71 +134,40 @@ async def process_knowledge_base_document(
         if not document:
             raise Exception(f"Document {document_id} not found")
 
-        # Reject duplicates (same hash already ingested for this org).
+        # Reject duplicates
         existing_doc = await db_client.get_document_by_hash(file_hash, organization_id)
         if existing_doc and existing_doc.id != document_id:
             error_message = (
                 f"This file is a duplicate of '{existing_doc.filename}'. "
-                f"Please delete the duplicate files and consolidate them into a "
-                f"single unique file before uploading."
+                "Please delete the existing file before uploading again."
             )
-            logger.warning(
-                f"Duplicate document detected: {document_id} is duplicate of "
-                f"{existing_doc.id} ({existing_doc.filename})"
-            )
-            await db_client.update_document_metadata(
-                document_id,
-                file_size_bytes=file_size,
-                file_hash=file_hash,
-                mime_type=mime_type,
-            )
-            await db_client.update_document_status(
-                document_id,
-                "failed",
-                error_message=error_message,
-                docling_metadata={
-                    "duplicate_of": existing_doc.document_uuid,
-                    "duplicate_filename": existing_doc.filename,
-                },
-            )
+            await db_client.update_document_metadata(document_id, file_size_bytes=file_size, file_hash=file_hash, mime_type=mime_type)
+            await db_client.update_document_status(document_id, "failed", error_message=error_message)
             return
 
-        await db_client.update_document_metadata(
-            document_id,
-            file_size_bytes=file_size,
-            file_hash=file_hash,
-            mime_type=mime_type,
-        )
+        await db_client.update_document_metadata(document_id, file_size_bytes=file_size, file_hash=file_hash, mime_type=mime_type)
 
-        logger.info(f"Delegating document processing to MPS (mode={retrieval_mode})")
-        mps_response = await mps_service_key_client.process_document(
-            file_path=temp_file_path,
-            filename=filename,
-            content_type=mime_type or "application/octet-stream",
-            retrieval_mode=retrieval_mode,
-            max_tokens=max_tokens,
-            organization_id=organization_id,
-            created_by=created_by_provider_id,
-        )
+        # Extract text locally
+        logger.info(f"Extracting text from {filename}")
+        try:
+            full_text = _extract_text(temp_file_path, filename)
+        except Exception as e:
+            raise Exception(f"Failed to extract text from {filename}: {e}") from e
 
-        docling_metadata = mps_response.get("docling_metadata", {})
+        if not full_text.strip():
+            await db_client.update_document_status(document_id, "failed", error_message="No text could be extracted from this file.")
+            return
 
+        logger.info(f"Extracted {len(full_text)} characters from {filename}")
+
+        # Full document mode — store text as-is, no embedding needed
         if retrieval_mode == "full_document":
-            full_text = mps_response.get("full_text") or ""
             await db_client.update_document_full_text(document_id, full_text)
-            await db_client.update_document_status(
-                document_id,
-                "completed",
-                total_chunks=0,
-                docling_metadata=docling_metadata,
-            )
-            logger.info(
-                f"Successfully processed full_document {document_id}. "
-                f"Text length: {len(full_text)} chars"
-            )
+            await db_client.update_document_status(document_id, "completed", total_chunks=0, docling_metadata={"char_count": len(full_text)})
+            logger.info(f"Stored full_document {document_id} ({len(full_text)} chars)")
             return
 
-        # Chunked mode: fetch user embedding config, embed via OpenAI, persist chunks.
+        # Chunked mode — chunk + embed
         embeddings_api_key = None
         embeddings_model = None
         embeddings_base_url = None
@@ -158,18 +177,20 @@ async def process_knowledge_base_document(
                 embeddings_api_key = user_config.embeddings.api_key
                 embeddings_model = user_config.embeddings.model
                 embeddings_base_url = getattr(user_config.embeddings, "base_url", None)
-                logger.info(f"Using user embeddings config: model={embeddings_model}")
 
         if not embeddings_api_key:
-            error_message = (
-                "OpenAI API key not configured. Please set your API key in "
-                "Model Configurations > Embedding to process documents."
-            )
-            logger.warning(f"Document {document_id}: {error_message}")
             await db_client.update_document_status(
-                document_id, "failed", error_message=error_message
+                document_id, "failed",
+                error_message="OpenAI API key not configured. Go to Model Configurations > Embedding to add your key."
             )
             return
+
+        chunks = _chunk_text(full_text, max_tokens=max_tokens or DEFAULT_CHUNK_TOKENS)
+        if not chunks:
+            await db_client.update_document_status(document_id, "failed", error_message="Document produced no chunks after processing.")
+            return
+
+        logger.info(f"Created {len(chunks)} chunks from {filename}")
 
         embedding_service = OpenAIEmbeddingService(
             db_client=db_client,
@@ -178,66 +199,44 @@ async def process_knowledge_base_document(
             base_url=embeddings_base_url,
         )
 
-        mps_chunks = mps_response.get("chunks", [])
-        if not mps_chunks:
-            logger.warning(f"Document {document_id}: MPS returned zero chunks")
-
-        chunk_records = []
-        chunk_texts = []
-        for chunk in mps_chunks:
-            contextualized = chunk.get("contextualized_text") or chunk["chunk_text"]
-            chunk_records.append(
-                KnowledgeBaseChunkModel(
-                    document_id=document_id,
-                    organization_id=organization_id,
-                    chunk_text=chunk["chunk_text"],
-                    contextualized_text=contextualized,
-                    chunk_index=chunk["chunk_index"],
-                    chunk_metadata=chunk.get("chunk_metadata") or {},
-                    embedding_model=embedding_service.get_model_id(),
-                    embedding_dimension=embedding_service.get_embedding_dimension(),
-                    token_count=chunk.get("token_count", 0),
-                )
+        chunk_records = [
+            KnowledgeBaseChunkModel(
+                document_id=document_id,
+                organization_id=organization_id,
+                chunk_text=c["chunk_text"],
+                contextualized_text=c["chunk_text"],
+                chunk_index=c["chunk_index"],
+                chunk_metadata=c["chunk_metadata"],
+                embedding_model=embedding_service.get_model_id(),
+                embedding_dimension=embedding_service.get_embedding_dimension(),
+                token_count=c["token_count"],
             )
-            chunk_texts.append(contextualized)
+            for c in chunks
+        ]
 
-        logger.info(
-            f"Generating embeddings for {len(chunk_texts)} chunks "
-            f"using {embedding_service.get_model_id()}"
-        )
+        chunk_texts = [c["chunk_text"] for c in chunks]
+        logger.info(f"Generating embeddings for {len(chunk_texts)} chunks")
         embeddings = await embedding_service.embed_texts(chunk_texts)
         for chunk_record, embedding in zip(chunk_records, embeddings):
             chunk_record.embedding = embedding
 
-        logger.info("Storing chunks in database")
         await db_client.create_chunks_batch(chunk_records)
-
         await db_client.update_document_status(
-            document_id,
-            "completed",
+            document_id, "completed",
             total_chunks=len(chunk_records),
-            docling_metadata=docling_metadata,
+            docling_metadata={"char_count": len(full_text), "chunk_count": len(chunks)},
         )
 
-        logger.info(
-            f"Successfully processed knowledge base document {document_id}. "
-            f"Total chunks: {len(chunk_records)}"
-        )
+        logger.info(f"Successfully processed document {document_id} — {len(chunk_records)} chunks stored")
 
     except Exception as e:
-        logger.error(
-            f"Error processing knowledge base document {document_id}: {e}",
-            exc_info=True,
-        )
-        await db_client.update_document_status(
-            document_id, "failed", error_message=str(e)
-        )
+        logger.error(f"Error processing knowledge base document {document_id}: {e}", exc_info=True)
+        await db_client.update_document_status(document_id, "failed", error_message=str(e))
         raise
 
     finally:
         if temp_file_path and os.path.exists(temp_file_path):
             try:
                 os.remove(temp_file_path)
-                logger.debug(f"Cleaned up temp file: {temp_file_path}")
-            except Exception as e:
-                logger.warning(f"Failed to clean up temp file {temp_file_path}: {e}")
+            except Exception:
+                pass
