@@ -105,6 +105,7 @@ TEMPLATES = [
                     "target": "collect_details",
                     "label": "collect_details",
                     "data": {
+                        "label": "collect_details",
                         "condition": "The caller has stated what type of appointment they need and you are ready to collect scheduling details"
                     }
                 },
@@ -114,6 +115,7 @@ TEMPLATES = [
                     "target": "confirm_booking",
                     "label": "confirm_booking",
                     "data": {
+                        "label": "confirm_booking",
                         "condition": "You have collected the caller's preferred date, time, and phone number"
                     }
                 },
@@ -123,6 +125,7 @@ TEMPLATES = [
                     "target": "end",
                     "label": "end_call",
                     "data": {
+                        "label": "end_call",
                         "condition": "The caller wants to cancel, is not interested, or wants to call back later"
                     }
                 },
@@ -132,6 +135,7 @@ TEMPLATES = [
                     "target": "end",
                     "label": "end_call",
                     "data": {
+                        "label": "end_call",
                         "condition": "The booking is confirmed and the caller is ready to hang up"
                     }
                 }
@@ -249,35 +253,35 @@ TEMPLATES = [
                     "source": "start",
                     "target": "discover_needs",
                     "label": "discover_needs",
-                    "data": {"condition": "You have the caller's name and initial reason for calling"}
+                    "data": {"label": "discover_needs", "condition": "You have the caller's name and initial reason for calling"}
                 },
                 {
                     "id": "e2",
                     "source": "discover_needs",
                     "target": "hot_lead",
                     "label": "route_hot_lead",
-                    "data": {"condition": "The caller has clear budget, urgent timeline, and is the decision maker — they are a hot lead ready to move forward"}
+                    "data": {"label": "route_hot_lead", "condition": "The caller has clear budget, urgent timeline, and is the decision maker — they are a hot lead ready to move forward"}
                 },
                 {
                     "id": "e3",
                     "source": "discover_needs",
                     "target": "nurture",
                     "label": "route_nurture",
-                    "data": {"condition": "The caller is interested but has no budget, unclear timeline, or is just browsing — they need nurturing"}
+                    "data": {"label": "route_nurture", "condition": "The caller is interested but has no budget, unclear timeline, or is just browsing — they need nurturing"}
                 },
                 {
                     "id": "e4",
                     "source": "hot_lead",
                     "target": "end",
                     "label": "end_call",
-                    "data": {"condition": "Demo is scheduled or the conversation is complete"}
+                    "data": {"label": "end_call", "condition": "Demo is scheduled or the conversation is complete"}
                 },
                 {
                     "id": "e5",
                     "source": "nurture",
                     "target": "end",
                     "label": "end_call",
-                    "data": {"condition": "Follow-up plan is set and the caller is ready to hang up"}
+                    "data": {"label": "end_call", "condition": "Follow-up plan is set and the caller is ready to hang up"}
                 }
             ]
         }
@@ -385,35 +389,35 @@ TEMPLATES = [
                     "source": "start",
                     "target": "diagnose",
                     "label": "diagnose_issue",
-                    "data": {"condition": "You understand the caller's issue and are ready to investigate"}
+                    "data": {"label": "diagnose_issue", "condition": "You understand the caller's issue and are ready to investigate"}
                 },
                 {
                     "id": "e2",
                     "source": "diagnose",
                     "target": "resolve",
                     "label": "resolve_issue",
-                    "data": {"condition": "You have successfully resolved the issue or answered the question"}
+                    "data": {"label": "resolve_issue", "condition": "You have successfully resolved the issue or answered the question"}
                 },
                 {
                     "id": "e3",
                     "source": "diagnose",
                     "target": "escalate",
                     "label": "escalate_to_human",
-                    "data": {"condition": "The issue requires a human agent — it is complex, requires backend access, or the caller is very upset"}
+                    "data": {"label": "escalate_to_human", "condition": "The issue requires a human agent — it is complex, requires backend access, or the caller is very upset"}
                 },
                 {
                     "id": "e4",
                     "source": "resolve",
                     "target": "end",
                     "label": "end_call",
-                    "data": {"condition": "The caller is satisfied and ready to end the call"}
+                    "data": {"label": "end_call", "condition": "The caller is satisfied and ready to end the call"}
                 },
                 {
                     "id": "e5",
                     "source": "escalate",
                     "target": "end",
                     "label": "end_call",
-                    "data": {"condition": "Escalation is complete and caller is being transferred"}
+                    "data": {"label": "end_call", "condition": "Escalation is complete and caller is being transferred"}
                 }
             ]
         }
@@ -529,56 +533,56 @@ TEMPLATES = [
                     "source": "start",
                     "target": "pitch",
                     "label": "start_pitch",
-                    "data": {"condition": "The prospect confirmed they are available and willing to hear the pitch"}
+                    "data": {"label": "start_pitch", "condition": "The prospect confirmed they are available and willing to hear the pitch"}
                 },
                 {
                     "id": "e2",
                     "source": "start",
                     "target": "end",
                     "label": "end_call",
-                    "data": {"condition": "Bad time or wrong person — end politely"}
+                    "data": {"label": "end_call", "condition": "Bad time or wrong person — end politely"}
                 },
                 {
                     "id": "e3",
                     "source": "pitch",
                     "target": "schedule_demo",
                     "label": "schedule_demo",
-                    "data": {"condition": "The prospect is interested and ready to schedule a demo or meeting"}
+                    "data": {"label": "schedule_demo", "condition": "The prospect is interested and ready to schedule a demo or meeting"}
                 },
                 {
                     "id": "e4",
                     "source": "pitch",
                     "target": "handle_objection",
                     "label": "handle_objection",
-                    "data": {"condition": "The prospect raised a specific objection that needs to be addressed"}
+                    "data": {"label": "handle_objection", "condition": "The prospect raised a specific objection that needs to be addressed"}
                 },
                 {
                     "id": "e5",
                     "source": "pitch",
                     "target": "end",
                     "label": "end_call",
-                    "data": {"condition": "The prospect is clearly not interested — end gracefully"}
+                    "data": {"label": "end_call", "condition": "The prospect is clearly not interested — end gracefully"}
                 },
                 {
                     "id": "e6",
                     "source": "handle_objection",
                     "target": "schedule_demo",
                     "label": "schedule_demo",
-                    "data": {"condition": "Objection handled successfully and prospect is now open to a demo"}
+                    "data": {"label": "schedule_demo", "condition": "Objection handled successfully and prospect is now open to a demo"}
                 },
                 {
                     "id": "e7",
                     "source": "handle_objection",
                     "target": "end",
                     "label": "end_call",
-                    "data": {"condition": "Prospect remains firm after objection handling"}
+                    "data": {"label": "end_call", "condition": "Prospect remains firm after objection handling"}
                 },
                 {
                     "id": "e8",
                     "source": "schedule_demo",
                     "target": "end",
                     "label": "end_call",
-                    "data": {"condition": "Demo is scheduled and confirmed"}
+                    "data": {"label": "end_call", "condition": "Demo is scheduled and confirmed"}
                 }
             ]
         }
@@ -690,42 +694,42 @@ TEMPLATES = [
                     "source": "start",
                     "target": "route_sales",
                     "label": "route_to_sales",
-                    "data": {"condition": "Caller wants to speak with sales or has a pricing or product question"}
+                    "data": {"label": "route_to_sales", "condition": "Caller wants to speak with sales or has a pricing or product question"}
                 },
                 {
                     "id": "e2",
                     "source": "start",
                     "target": "route_support",
                     "label": "route_to_support",
-                    "data": {"condition": "Caller needs technical support or has an issue with their account or order"}
+                    "data": {"label": "route_to_support", "condition": "Caller needs technical support or has an issue with their account or order"}
                 },
                 {
                     "id": "e3",
                     "source": "start",
                     "target": "take_message",
                     "label": "take_message",
-                    "data": {"condition": "Caller wants to leave a message or the department they need is unavailable"}
+                    "data": {"label": "take_message", "condition": "Caller wants to leave a message or the department they need is unavailable"}
                 },
                 {
                     "id": "e4",
                     "source": "route_sales",
                     "target": "end",
                     "label": "end_call",
-                    "data": {"condition": "Transfer confirmed or question answered"}
+                    "data": {"label": "end_call", "condition": "Transfer confirmed or question answered"}
                 },
                 {
                     "id": "e5",
                     "source": "route_support",
                     "target": "end",
                     "label": "end_call",
-                    "data": {"condition": "Transfer confirmed"}
+                    "data": {"label": "end_call", "condition": "Transfer confirmed"}
                 },
                 {
                     "id": "e6",
                     "source": "take_message",
                     "target": "end",
                     "label": "end_call",
-                    "data": {"condition": "Message taken and confirmed"}
+                    "data": {"label": "end_call", "condition": "Message taken and confirmed"}
                 }
             ]
         }
