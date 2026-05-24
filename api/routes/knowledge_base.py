@@ -428,6 +428,9 @@ async def search_chunks(
             total_results=len(chunks),
         )
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
 
 class FAQEntry(BaseModel):
     question: str
