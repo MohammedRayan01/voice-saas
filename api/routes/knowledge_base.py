@@ -526,7 +526,3 @@ async def save_faq(
         created_by=user.id,
         is_active=True,
     )
-
-    except Exception as exc:
-        logger.error(f"Error searching chunks: {exc}")
-        raise HTTPException(status_code=500, detail="Failed to search chunks") from exc
