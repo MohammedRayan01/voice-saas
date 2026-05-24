@@ -1,11 +1,12 @@
 'use client';
 
-import { Copy } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { duplicateWorkflowTemplateApiV1WorkflowTemplatesDuplicatePost } from '@/client/sdk.gen';
-import { Button } from "@/components/ui/button";
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/lib/auth';
 import logger from '@/lib/logger';
 
@@ -13,46 +14,24 @@ interface DuplicateWorkflowTemplateProps {
     id: number;
     title: string;
     description: string;
-    serverAccessToken?: string | null;
 }
 
-export function DuplicateWorkflowTemplate({ id, title, description, serverAccessToken }: DuplicateWorkflowTemplateProps) {
+export function DuplicateWorkflowTemplate({ id, title, description }: DuplicateWorkflowTemplateProps) {
     const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
     const { user, getAccessToken } = useAuth();
 
-    const handleDuplicate = async () => {
+    const handleUseTemplate = async () => {
+        if (!user) return;
         setIsLoading(true);
         try {
-            // Use server-provided token if available, otherwise try to get from client auth
-            let accessToken = serverAccessToken;
-
-            if (!accessToken) {
-                if (!user) {
-                    logger.error('User not authenticated and no server token provided');
-                    return;
-                }
-                accessToken = await getAccessToken();
-            }
-
-            if (!accessToken) {
-                logger.error('No access token available');
-                return;
-            }
-
+            const accessToken = await getAccessToken();
             const response = await duplicateWorkflowTemplateApiV1WorkflowTemplatesDuplicatePost({
-                body: {
-                    template_id: id,
-                    workflow_name: title,
-                },
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                },
+                body: { template_id: id, workflow_name: title },
+                headers: { Authorization: `Bearer ${accessToken}` },
             });
 
             if (response.data) {
-                logger.info('Workflow created successfully from template');
-                // Redirect to the new workflow
                 router.push(`/workflow/${response.data.id}`);
             }
         } catch (error) {
@@ -63,20 +42,24 @@ export function DuplicateWorkflowTemplate({ id, title, description, serverAccess
     };
 
     return (
-        <div className="bg-white border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow p-4">
-            <div>
-                <h3 className="text-lg font-semibold mb-2">{title}</h3>
-                <p className="text-gray-600 mb-4">{description}</p>
+        <Card className="flex flex-col hover:shadow-md transition-shadow">
+            <CardHeader className="pb-2">
+                <CardTitle className="text-base">{title}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex-1">
+                <CardDescription className="text-sm leading-relaxed">{description}</CardDescription>
+            </CardContent>
+            <CardFooter>
                 <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={handleDuplicate}
+                    className="w-full gap-2"
+                    onClick={handleUseTemplate}
                     disabled={isLoading}
                 >
-                    <Copy className="w-4 h-4 mr-2" />
-                    {isLoading ? 'Creating...' : 'Duplicate Workflow Template'}
+                    {isLoading ? 'Creating...' : (
+                        <>Use Template <ArrowRight className="w-4 h-4" /></>
+                    )}
                 </Button>
-            </div>
-        </div>
+            </CardFooter>
+        </Card>
     );
 }

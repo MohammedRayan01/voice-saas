@@ -1,9 +1,15 @@
 'use client';
 
+import { Loader2, Sparkles, Wand2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-import { createWorkflowFromTemplateApiV1WorkflowCreateTemplatePost, createWorkflowRunApiV1WorkflowWorkflowIdRunsPost } from '@/client/sdk.gen';
+import {
+    createWorkflowFromTemplateApiV1WorkflowCreateTemplatePost,
+    createWorkflowRunApiV1WorkflowWorkflowIdRunsPost,
+    getWorkflowTemplatesApiV1WorkflowTemplatesGet,
+} from '@/client/sdk.gen';
+import { DuplicateWorkflowTemplate } from '@/components/workflow/TemplateCard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -23,24 +29,60 @@ import { useAuth } from '@/lib/auth';
 import logger from '@/lib/logger';
 import { getRandomId } from '@/lib/utils';
 
+interface WorkflowTemplate {
+    id: number;
+    template_name: string;
+    template_description: string;
+    template_json: Record<string, unknown>;
+    created_at: string;
+}
+
 export default function CreateWorkflowPage() {
     const router = useRouter();
-    const { user, getAccessToken } = useAuth();
+    const { user, loading: authLoading, getAccessToken } = useAuth();
+    const hasFetched = useRef(false);
+
+    const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
+    const [templatesLoading, setTemplatesLoading] = useState(true);
+
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [workflowId, setWorkflowId] = useState<string | null>(null);
+    const [showCustomForm, setShowCustomForm] = useState(false);
 
     const [callType, setCallType] = useState<'inbound' | 'outbound'>('inbound');
     const [useCase, setUseCase] = useState('');
     const [activityDescription, setActivityDescription] = useState('');
+
+    useEffect(() => {
+        if (authLoading || !user || hasFetched.current) return;
+        hasFetched.current = true;
+
+        const fetchTemplates = async () => {
+            try {
+                const accessToken = await getAccessToken();
+                const response = await getWorkflowTemplatesApiV1WorkflowTemplatesGet({
+                    headers: { Authorization: `Bearer ${accessToken}` },
+                });
+                if (response.data) {
+                    setTemplates(response.data as WorkflowTemplate[]);
+                }
+            } catch (err) {
+                logger.error(`Error fetching templates: ${err}`);
+            } finally {
+                setTemplatesLoading(false);
+            }
+        };
+
+        fetchTemplates();
+    }, [authLoading, user]);
 
     const handleCreateWorkflow = async () => {
         if (!useCase || !activityDescription) {
             setError('Please fill in all fields');
             return;
         }
-
         if (!user) {
             setError('You must be logged in to create a workflow');
             return;
@@ -51,17 +93,9 @@ export default function CreateWorkflowPage() {
 
         try {
             const accessToken = await getAccessToken();
-
-            // Call the API to create workflow from template
             const response = await createWorkflowFromTemplateApiV1WorkflowCreateTemplatePost({
-                body: {
-                    call_type: callType,
-                    use_case: useCase,
-                    activity_description: activityDescription,
-                },
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                },
+                body: { call_type: callType, use_case: useCase, activity_description: activityDescription },
+                headers: { Authorization: `Bearer ${accessToken}` },
             });
 
             if (response.data?.id) {
@@ -83,111 +117,142 @@ export default function CreateWorkflowPage() {
             const accessToken = await getAccessToken();
             const workflowRunName = `WR-${getRandomId()}`;
 
-            // Create a workflow run
             const response = await createWorkflowRunApiV1WorkflowWorkflowIdRunsPost({
-                path: {
-                    workflow_id: Number(workflowId),
-                },
-                body: {
-                    mode: WORKFLOW_RUN_MODES.SMALL_WEBRTC, // Same mode as "Web Call" button
-                    name: workflowRunName
-                },
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                },
+                path: { workflow_id: Number(workflowId) },
+                body: { mode: WORKFLOW_RUN_MODES.SMALL_WEBRTC, name: workflowRunName },
+                headers: { Authorization: `Bearer ${accessToken}` },
             });
 
-            // Navigate to the workflow run page
             if (response.data?.id) {
                 router.push(`/workflow/${workflowId}/run/${response.data.id}`);
             }
         } catch (err) {
             logger.error(`Error creating workflow run: ${err}`);
-            // Fallback to workflow page if run creation fails
             router.push(`/workflow/${workflowId}`);
         }
     };
 
     return (
         <div className="min-h-screen bg-background">
-            <div className="container mx-auto px-4 py-8 max-w-2xl">
-                <div className="mb-6">
+            <div className="container mx-auto px-4 py-10 max-w-5xl">
+                <div className="mb-8">
                     <h1 className="text-3xl font-bold mb-2">Create Voice Agent</h1>
                     <p className="text-muted-foreground">
-                        Tell us about your use case and we&apos;ll create a customized voice agent for you
+                        Start from a template or describe your use case and let AI build it for you.
                     </p>
                 </div>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Agent Details</CardTitle>
-                        <CardDescription>
-                            Configure your voice agent settings
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        <div className="space-y-2">
-                            <Label htmlFor="call-type">Call Type</Label>
-                            <Select value={callType} onValueChange={(value) => setCallType(value as 'inbound' | 'outbound')}>
-                                <SelectTrigger id="call-type">
-                                    <SelectValue placeholder="Select type" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="inbound">
-                                        Inbound (Users call AI)
-                                    </SelectItem>
-                                    <SelectItem value="outbound">
-                                        Outbound (AI calls users)
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <p className="text-sm text-muted-foreground">
-                                Choose whether users will call your AI or your AI will call users
-                            </p>
-                        </div>
+                {/* Template Gallery */}
+                <div className="mb-10">
+                    <h2 className="text-lg font-semibold mb-4">Start from a Template</h2>
 
-                        <div className="space-y-2">
-                            <Label htmlFor="use-case">Use Case</Label>
-                            <Input
-                                id="use-case"
-                                placeholder="e.g., Lead Qualification, HR Screening, Customer Support"
-                                value={useCase}
-                                onChange={(e) => setUseCase(e.target.value)}
-                            />
-                            <p className="text-sm text-muted-foreground">
-                                Describe the primary purpose of your voice agent
-                            </p>
+                    {templatesLoading ? (
+                        <div className="flex items-center gap-2 text-muted-foreground py-8">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Loading templates...</span>
                         </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="activity-description">Activity Description</Label>
-                            <Textarea
-                                id="activity-description"
-                                placeholder="Describe briefly what your voice agent will do (e.g., Qualify leads for real estate, Screen candidates for roles, Handle customer support). This will be a prompt to an LLM."
-                                value={activityDescription}
-                                onChange={(e) => setActivityDescription(e.target.value)}
-                                className="min-h-[100px]"
-                            />
-                            <p className="text-sm text-muted-foreground">
-                                This description will be used to generate the AI prompt for your voice agent
-                            </p>
+                    ) : templates.length === 0 ? (
+                        <p className="text-muted-foreground py-4">No templates available.</p>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {templates.map((t) => (
+                                <DuplicateWorkflowTemplate
+                                    key={t.id}
+                                    id={t.id}
+                                    title={t.template_name}
+                                    description={t.template_description}
+                                />
+                            ))}
                         </div>
+                    )}
+                </div>
 
-                        {error && (
-                            <p className="text-sm text-red-500">{error}</p>
-                        )}
+                {/* Divider */}
+                <div className="relative mb-8">
+                    <div className="absolute inset-0 flex items-center">
+                        <div className="w-full border-t border-border" />
+                    </div>
+                    <div className="relative flex justify-center text-sm">
+                        <span className="px-3 bg-background text-muted-foreground">or build with AI</span>
+                    </div>
+                </div>
 
-                        <div className="pt-4">
-                            <Button
-                                onClick={handleCreateWorkflow}
-                                disabled={isLoading || !useCase || !activityDescription}
-                                className="w-full"
-                            >
-                                {isLoading ? 'Creating...' : 'Create Agent'}
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
+                {/* AI Generator */}
+                {!showCustomForm ? (
+                    <div className="flex justify-center">
+                        <Button
+                            variant="outline"
+                            size="lg"
+                            className="gap-2"
+                            onClick={() => setShowCustomForm(true)}
+                        >
+                            <Wand2 className="w-4 h-4" />
+                            Generate custom agent with AI
+                        </Button>
+                    </div>
+                ) : (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Sparkles className="w-5 h-5" />
+                                AI Agent Builder
+                            </CardTitle>
+                            <CardDescription>
+                                Describe your use case and we&apos;ll generate a workflow for you
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="space-y-2">
+                                <Label htmlFor="call-type">Call Type</Label>
+                                <Select value={callType} onValueChange={(v) => setCallType(v as 'inbound' | 'outbound')}>
+                                    <SelectTrigger id="call-type">
+                                        <SelectValue placeholder="Select type" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="inbound">Inbound (Users call AI)</SelectItem>
+                                        <SelectItem value="outbound">Outbound (AI calls users)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="use-case">Use Case</Label>
+                                <Input
+                                    id="use-case"
+                                    placeholder="e.g., Lead Qualification, HR Screening, Customer Support"
+                                    value={useCase}
+                                    onChange={(e) => setUseCase(e.target.value)}
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="activity-description">Activity Description</Label>
+                                <Textarea
+                                    id="activity-description"
+                                    placeholder="Describe what your voice agent will do..."
+                                    value={activityDescription}
+                                    onChange={(e) => setActivityDescription(e.target.value)}
+                                    className="min-h-[100px]"
+                                />
+                            </div>
+
+                            {error && <p className="text-sm text-red-500">{error}</p>}
+
+                            <div className="flex gap-3 pt-2">
+                                <Button variant="ghost" onClick={() => setShowCustomForm(false)}>
+                                    Cancel
+                                </Button>
+                                <Button
+                                    onClick={handleCreateWorkflow}
+                                    disabled={isLoading || !useCase || !activityDescription}
+                                    className="flex-1"
+                                >
+                                    {isLoading ? 'Creating...' : 'Generate Agent'}
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
             </div>
 
             {/* Loading Overlay */}
@@ -195,18 +260,14 @@ export default function CreateWorkflowPage() {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
                     <Card className="w-full max-w-md p-8">
                         <div className="flex flex-col items-center space-y-6">
-                            {/* Animated spinner */}
                             <div className="relative">
-                                <div className="w-16 h-16 border-4 border-muted rounded-full"></div>
-                                <div className="absolute top-0 left-0 w-16 h-16 border-4 border-transparent border-t-primary rounded-full animate-spin"></div>
+                                <div className="w-16 h-16 border-4 border-muted rounded-full" />
+                                <div className="absolute top-0 left-0 w-16 h-16 border-4 border-transparent border-t-primary rounded-full animate-spin" />
                             </div>
-
                             <div className="text-center space-y-2">
-                                <h3 className="text-lg font-semibold">
-                                    Creating Your Workflow
-                                </h3>
+                                <h3 className="text-lg font-semibold">Creating Your Workflow</h3>
                                 <p className="text-sm text-muted-foreground max-w-xs">
-                                    We&apos;re setting up your voice agent with your specifications. This will just take a moment...
+                                    We&apos;re setting up your voice agent. This will just take a moment...
                                 </p>
                             </div>
                         </div>
@@ -226,25 +287,15 @@ export default function CreateWorkflowPage() {
                         </DialogTitle>
                         <DialogDescription asChild>
                             <div className="mt-4 space-y-3">
-                                <p>
-                                    A voice agent workflow has been generated for your use case, with some artificial data and sample actions.
-                                </p>
-                                <p>
-                                    The voice bot is pre-set to communicate in English with an American accent.
-                                </p>
-                                <p>
-                                    Next steps would be to test the voice bot using web call, and then modify it to suit your use case.
-                                </p>
+                                <p>Your voice agent has been generated. Test it with a web call or edit the nodes to customise it further.</p>
                             </div>
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter className="mt-6">
-                        <Button
-                            onClick={handleModalContinue}
-                            className="w-full"
-                        >
-                            Start Web Call
+                        <Button variant="outline" onClick={() => router.push(`/workflow/${workflowId}`)}>
+                            Edit Workflow
                         </Button>
+                        <Button onClick={handleModalContinue}>Start Web Call</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
