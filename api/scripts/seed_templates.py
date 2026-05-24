@@ -11,7 +11,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
 
-from api.db.db_client import DBClient
 from api.db.workflow_template_client import WorkflowTemplateClient
 
 # ─── Template definitions ────────────────────────────────────────────────────
@@ -738,8 +737,7 @@ TEMPLATES = [
 # ─── Seed function ────────────────────────────────────────────────────────────
 
 async def seed():
-    db = DBClient()
-    client = WorkflowTemplateClient(db.async_session_factory)
+    client = WorkflowTemplateClient()
 
     existing = await client.get_all_workflow_templates()
     existing_names = {t.template_name for t in existing}
