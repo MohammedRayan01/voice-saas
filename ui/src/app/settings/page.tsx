@@ -7,6 +7,7 @@ import { Suspense } from "react";
 import { MCPSection } from "@/components/MCPSection";
 import { TelemetrySection } from "@/components/TelemetrySection";
 import { BillingSection } from "@/components/settings/BillingSection";
+import { GoogleCalendarSection } from "@/components/settings/GoogleCalendarSection";
 import { PricingCalculator } from "@/components/settings/PricingCalculator";
 import { TeamSection } from "@/components/settings/TeamSection";
 import { WebhooksSection } from "@/components/settings/WebhooksSection";
@@ -19,6 +20,7 @@ const TABS = [
   { id: "billing", label: "Billing" },
   { id: "calculator", label: "Cost Calculator" },
   { id: "webhooks", label: "Webhooks" },
+  { id: "integrations", label: "Integrations" },
   { id: "widget", label: "Widget" },
   { id: "platform", label: "Platform" },
 ];
@@ -64,6 +66,7 @@ function SettingsContent() {
       {activeTab === "billing" && <BillingSection />}
       {activeTab === "calculator" && <PricingCalculator />}
       {activeTab === "webhooks" && <WebhooksSection />}
+      {activeTab === "integrations" && <GoogleCalendarSection />}
       {activeTab === "widget" && <WidgetSection />}
       {activeTab === "platform" && (
         <div className="max-w-2xl space-y-6">

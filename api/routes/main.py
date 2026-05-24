@@ -3,6 +3,8 @@ from loguru import logger
 from pydantic import BaseModel
 
 from api.routes.agent_stream import router as agent_stream_router
+from api.routes.contacts import router as contacts_router
+from api.routes.google_calendar import router as google_calendar_router
 from api.routes.billing import router as billing_router
 from api.routes.webhooks import router as webhooks_router
 from api.routes.auth import router as auth_router
@@ -57,6 +59,8 @@ router.include_router(workflow_recording_router)
 router.include_router(auth_router)
 router.include_router(node_types_router)
 router.include_router(agent_stream_router)
+router.include_router(contacts_router)
+router.include_router(google_calendar_router)
 router.include_router(billing_router)
 router.include_router(webhooks_router)
 

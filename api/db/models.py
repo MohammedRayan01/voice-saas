@@ -1264,3 +1264,26 @@ class KnowledgeBaseChunkModel(Base):
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
     )
+
+
+class ContactModel(Base):
+    __tablename__ = "contacts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    first_name = Column(String(100), nullable=True)
+    last_name = Column(String(100), nullable=True)
+    phone = Column(String(50), nullable=True, index=True)
+    email = Column(String(255), nullable=True, index=True)
+    company = Column(String(255), nullable=True)
+    job_title = Column(String(255), nullable=True)
+    notes = Column(Text, nullable=True)
+    tags = Column(JSON, nullable=False, default=list)
+    custom_fields = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+    __table_args__ = (
+        Index("ix_contacts_org_phone", "organization_id", "phone"),
+        Index("ix_contacts_org_email", "organization_id", "email"),
+    )

@@ -91,6 +91,9 @@ class OrganizationConfigurationKey(Enum):
     LANGFUSE_CREDENTIALS = (
         "LANGFUSE_CREDENTIALS"  # Org-level Langfuse tracing credentials
     )
+    GOOGLE_CALENDAR_CREDENTIALS = (
+        "GOOGLE_CALENDAR_CREDENTIALS"  # OAuth tokens for Google Calendar integration
+    )
 
 
 class WorkflowStatus(Enum):
@@ -137,6 +140,7 @@ class ToolCategory(Enum):
     NATIVE = "native"  # Built-in integrations (future: dtmf_input)
     INTEGRATION = "integration"  # Third-party integrations (future: Google Calendar, Salesforce, etc.)
     MCP = "mcp"  # Customer-provided MCP server exposing a tool catalog
+    GOOGLE_CALENDAR = "google_calendar"  # Google Calendar tools (check availability, book, cancel)
 
 
 class ToolStatus(Enum):

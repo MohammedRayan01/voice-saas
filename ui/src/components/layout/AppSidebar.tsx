@@ -18,6 +18,7 @@ import {
   Phone,
   Settings,
   TrendingUp,
+  Users,
   Workflow,
   Wrench,
 } from "lucide-react";
@@ -114,6 +115,11 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         title: "Files",
         url: "/files",
         icon: Database,
+      },
+      {
+        title: "Contacts",
+        url: "/contacts",
+        icon: Users,
       },
       {
         title: "Recordings",
