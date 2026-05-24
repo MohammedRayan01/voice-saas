@@ -322,6 +322,92 @@ class CreateWorkflowTemplateRequest(BaseModel):
     activity_description: str
 
 
+@router.get("/templates")
+async def get_workflow_templates() -> List[WorkflowTemplateResponse]:
+    """
+    Get all available workflow templates.
+
+    Returns:
+        List of workflow templates
+    """
+    template_client = WorkflowTemplateClient()
+    templates = await template_client.get_all_workflow_templates()
+
+    return [
+        {
+            "id": template.id,
+            "template_name": template.template_name,
+            "template_description": template.template_description,
+            "template_json": template.template_json,
+            "created_at": template.created_at,
+        }
+        for template in templates
+    ]
+
+
+@router.post("/templates/duplicate")
+async def duplicate_workflow_template(
+    request: DuplicateTemplateRequest, user: UserModel = Depends(get_user)
+) -> WorkflowResponse:
+    """
+    Duplicate a workflow template to create a new workflow for the user.
+
+    Args:
+        request: The duplicate template request
+        user: The authenticated user
+
+    Returns:
+        The newly created workflow
+    """
+    template_client = WorkflowTemplateClient()
+    template = await template_client.get_workflow_template(request.template_id)
+
+    if not template:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Workflow template with id {request.template_id} not found",
+        )
+
+    # Create a new workflow from the template
+    # Regenerate trigger UUIDs to avoid conflicts with existing triggers
+    workflow_def = regenerate_trigger_uuids(template.template_json)
+
+    trigger_paths = extract_trigger_paths(workflow_def) if workflow_def else []
+    if trigger_paths:
+        try:
+            await db_client.assert_trigger_paths_available(
+                trigger_paths=trigger_paths,
+            )
+        except TriggerPathConflictError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+
+    workflow = await db_client.create_workflow(
+        request.workflow_name,
+        workflow_def,
+        user.id,
+        user.selected_organization_id,
+    )
+
+    if trigger_paths:
+        await db_client.sync_triggers_for_workflow(
+            workflow_id=workflow.id,
+            organization_id=user.selected_organization_id,
+            trigger_paths=trigger_paths,
+        )
+
+    return {
+        "id": workflow.id,
+        "name": workflow.name,
+        "status": workflow.status,
+        "created_at": workflow.created_at,
+        "workflow_definition": mask_workflow_definition(workflow_def),
+        "current_definition_id": workflow.current_definition_id,
+        "template_context_variables": workflow.template_context_variables,
+        "call_disposition_codes": workflow.call_disposition_codes,
+        "workflow_configurations": workflow.workflow_configurations,
+    }
+
+
 @router.post("/{workflow_id}/validate")
 async def validate_workflow(
     workflow_id: int,
@@ -1243,92 +1329,6 @@ async def download_workflow_report(
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-
-
-@router.get("/templates")
-async def get_workflow_templates() -> List[WorkflowTemplateResponse]:
-    """
-    Get all available workflow templates.
-
-    Returns:
-        List of workflow templates
-    """
-    template_client = WorkflowTemplateClient()
-    templates = await template_client.get_all_workflow_templates()
-
-    return [
-        {
-            "id": template.id,
-            "template_name": template.template_name,
-            "template_description": template.template_description,
-            "template_json": template.template_json,
-            "created_at": template.created_at,
-        }
-        for template in templates
-    ]
-
-
-@router.post("/templates/duplicate")
-async def duplicate_workflow_template(
-    request: DuplicateTemplateRequest, user: UserModel = Depends(get_user)
-) -> WorkflowResponse:
-    """
-    Duplicate a workflow template to create a new workflow for the user.
-
-    Args:
-        request: The duplicate template request
-        user: The authenticated user
-
-    Returns:
-        The newly created workflow
-    """
-    template_client = WorkflowTemplateClient()
-    template = await template_client.get_workflow_template(request.template_id)
-
-    if not template:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Workflow template with id {request.template_id} not found",
-        )
-
-    # Create a new workflow from the template
-    # Regenerate trigger UUIDs to avoid conflicts with existing triggers
-    workflow_def = regenerate_trigger_uuids(template.template_json)
-
-    trigger_paths = extract_trigger_paths(workflow_def) if workflow_def else []
-    if trigger_paths:
-        try:
-            await db_client.assert_trigger_paths_available(
-                trigger_paths=trigger_paths,
-            )
-        except TriggerPathConflictError as e:
-            raise HTTPException(status_code=409, detail=str(e))
-
-    workflow = await db_client.create_workflow(
-        request.workflow_name,
-        workflow_def,
-        user.id,
-        user.selected_organization_id,
-    )
-
-    if trigger_paths:
-        await db_client.sync_triggers_for_workflow(
-            workflow_id=workflow.id,
-            organization_id=user.selected_organization_id,
-            trigger_paths=trigger_paths,
-        )
-
-    return {
-        "id": workflow.id,
-        "name": workflow.name,
-        "status": workflow.status,
-        "created_at": workflow.created_at,
-        "workflow_definition": mask_workflow_definition(workflow_def),
-        "current_definition_id": workflow.current_definition_id,
-        "template_context_variables": workflow.template_context_variables,
-        "call_disposition_codes": workflow.call_disposition_codes,
-        "workflow_configurations": workflow.workflow_configurations,
-    }
 
 
 # ---------------------------------------------------------------------------
