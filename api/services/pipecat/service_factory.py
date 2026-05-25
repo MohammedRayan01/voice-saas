@@ -563,15 +563,28 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
             ),
         )
     elif provider == ServiceProviders.GOOGLE_REALTIME.value:
+        from pipecat.services.google.gemini_live.llm import GeminiVADParams
+        from google.genai.types import EndSensitivity, StartSensitivity
+
         from api.services.pipecat.realtime.gemini_live import (
             DograhGeminiLiveLLMService,
         )
 
         # Gemini Live enables input/output audio transcription by default
         # in its _connect() method — no need to configure it explicitly.
+        #
+        # VAD tuning: 700ms silence gives natural thinking pauses before
+        # the model responds. LOW end-sensitivity avoids cutting callers
+        # off mid-breath, which is the main cause of the "robotic" feel.
         settings_kwargs = {
             "model": model,
-            "voice": voice or "Puck",
+            "voice": voice or "Aoede",  # Aoede rated most natural by community
+            "temperature": 0.7,         # Adds natural variation without instability
+            "vad": GeminiVADParams(
+                silence_duration_ms=700,
+                end_sensitivity=EndSensitivity.END_SENSITIVITY_LOW,
+                start_sensitivity=StartSensitivity.START_SENSITIVITY_HIGH,
+            ),
         }
         if language:
             settings_kwargs["language"] = language

@@ -381,6 +381,7 @@ class StartCallNodeData(
         "prompt",
         "allow_interrupt",
         "add_global_prompt",
+        "voice_style",
         "extraction_enabled",
         "extraction_prompt",
         "extraction_variables",
@@ -415,6 +416,16 @@ class StartCallNodeData(
         "document_uuids": {
             "description": "Documents the agent can reference during this step.",
         },
+        "voice_style": {
+            "description": (
+                "Custom voice behavior instructions for Gemini Live (realtime mode only). "
+                "Leave blank to use sensible defaults. Override to change tone, style, or add "
+                "industry-specific guidance."
+            ),
+            "placeholder": (
+                'e.g. "Speak formally. Never use filler words. Keep answers under 2 sentences."'
+            ),
+        },
     },
 )
 class AgentNodeData(
@@ -423,7 +434,14 @@ class AgentNodeData(
     _ExtractionNodeDataMixin,
     _ToolDocumentRefsMixin,
 ):
-    pass
+    voice_style: Optional[str] = spec_field(
+        default=None,
+        ui_type=PropertyType.string,
+        display_name="Voice Style (Gemini Live)",
+        description="Custom voice behavior for Gemini Live. Leave blank for defaults.",
+        required=False,
+        editor="textarea",
+    )
 
 
 @node_spec(

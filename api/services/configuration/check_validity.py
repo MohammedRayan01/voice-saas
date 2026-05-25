@@ -67,9 +67,12 @@ class UserConfigurationValidator:
         }
         status_list = []
 
+        # When realtime mode is on, STT/TTS are handled by the realtime model — not required separately
+        stt_tts_required = not configuration.is_realtime
+
         status_list.extend(self._validate_service(configuration.llm, "llm"))
-        status_list.extend(self._validate_service(configuration.stt, "stt"))
-        status_list.extend(self._validate_service(configuration.tts, "tts"))
+        status_list.extend(self._validate_service(configuration.stt, "stt", required=stt_tts_required))
+        status_list.extend(self._validate_service(configuration.tts, "tts", required=stt_tts_required))
         # Embeddings is optional - only validate if configured
         status_list.extend(
             self._validate_service(

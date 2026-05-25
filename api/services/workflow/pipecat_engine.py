@@ -207,6 +207,29 @@ class PipecatEngine:
         if hasattr(self.llm, "_context") and not self.llm._context and self.context:
             self.llm._context = self.context
 
+        # Inject voice naturalness layer for Gemini Live — makes the agent sound
+        # conversational rather than robotic. Only applied when using realtime model.
+        from api.services.pipecat.realtime.gemini_live import DograhGeminiLiveLLMService
+
+        if isinstance(self.llm, DograhGeminiLiveLLMService):
+            node_voice_style = getattr(self._current_node, "voice_style", None) if self._current_node else None
+            if node_voice_style and node_voice_style.strip():
+                voice_layer = f"\n\n---\nVOICE STYLE INSTRUCTIONS:\n{node_voice_style.strip()}\n---"
+            else:
+                voice_layer = (
+                    "\n\n---\nVOICE NATURALNESS GUIDELINES (follow these in every response):\n"
+                    "- Use natural acknowledgments like \"hmm\", \"I see\", \"got it\", \"sure\" before answering.\n"
+                    "- Occasionally use \"um\" or \"uh\" when transitioning between thoughts — it sounds natural, not uncertain.\n"
+                    "- Keep sentences short and conversational. Avoid long unbroken monologues.\n"
+                    "- Pause naturally before answering complex questions — a brief \"let me think\" is fine.\n"
+                    "- If something is genuinely funny or lighthearted, laugh softly (e.g. \"haha\") — don't force it.\n"
+                    "- Mirror the caller's energy: if they're casual, be casual; if they're brief, be brief.\n"
+                    "- Never read like a script or list. Speak as if talking to a friend.\n"
+                    "- Do NOT start responses with \"Certainly!\", \"Of course!\", \"Absolutely!\", or similar filler affirmations.\n"
+                    "---"
+                )
+            system_prompt = system_prompt + voice_layer
+
         await self.llm._update_settings(LLMSettings(system_instruction=system_prompt))
 
     def _format_prompt(self, prompt: str) -> str:

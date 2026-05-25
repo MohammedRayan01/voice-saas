@@ -94,6 +94,7 @@ class Node:
         self.pre_call_fetch_credential_uuid = getattr(
             data, "pre_call_fetch_credential_uuid", None
         )
+        self.voice_style = getattr(data, "voice_style", None)
 
         self.data = data
 
