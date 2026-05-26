@@ -201,7 +201,7 @@ export function WorkflowRunsTable({
                                             </TableCell>
                                             <TableCell className="text-sm font-mono">
                                                 {typeof run.cost_info?.total_cost_usd === 'number'
-                                                    ? `$${(run.cost_info.total_cost_usd as number).toFixed(4)}`
+                                                    ? `₹${((run.cost_info.total_cost_usd as number) * 83.5).toFixed(3)}`
                                                     : "-"}
                                             </TableCell>
                                             <TableCell>
