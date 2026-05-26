@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactFlowInstance } from "@xyflow/react";
-import { AlertCircle, ArrowLeft, ChevronDown, Clipboard, Copy, Download, Eye, History, LoaderCircle, Menu, MoreVertical, Pencil, Phone, Rocket } from "lucide-react";
+import { AlertCircle, ArrowLeft, ChevronDown, Clipboard, Copy, Download, Eye, HelpCircle, History, LoaderCircle, Menu, MoreVertical, Pencil, Phone, Rocket, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import { useRef, useState } from "react";
@@ -74,6 +74,7 @@ export const WorkflowEditorHeader = ({
     const [savingWorkflow, setSavingWorkflow] = useState(false);
     const [duplicating, setDuplicating] = useState(false);
     const [publishing, setPublishing] = useState(false);
+    const [showDocs, setShowDocs] = useState(false);
     // One discriminated-union state instead of (isEditingName, nameDraft,
     // nameError, isRenaming): they're not independent — error and saving are
     // mutually exclusive, and both are meaningless in the display state. The
@@ -334,6 +335,15 @@ export const WorkflowEditorHeader = ({
                     )}
                 </button>
 
+                {/* Help / Docs button */}
+                <button
+                    onClick={() => setShowDocs(true)}
+                    className="flex items-center justify-center w-8 h-8 rounded-md border border-[#3a3a3a] hover:bg-[#2a2a2a] transition-colors"
+                    title="How to build workflows"
+                >
+                    <HelpCircle className="w-4 h-4 text-gray-400" />
+                </button>
+
                 {/* Unsaved changes indicator (hidden when viewing history) */}
                 {isDirty && !isViewingHistoricalVersion && (
                     <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-yellow-500/30 bg-yellow-500/10">
@@ -527,5 +537,142 @@ export const WorkflowEditorHeader = ({
                 </div>
             </div>
         </div>
+
+        {/* Docs slide-over panel */}
+        {showDocs && (
+            <div className="fixed inset-0 z-50 flex justify-end">
+                <div className="absolute inset-0 bg-black/50" onClick={() => setShowDocs(false)} />
+                <div className="relative w-full max-w-xl bg-[#1a1a1a] border-l border-[#2a2a2a] h-full overflow-y-auto shadow-2xl">
+                    {/* Panel header */}
+                    <div className="sticky top-0 z-10 flex items-center justify-between px-5 py-4 border-b border-[#2a2a2a] bg-[#1a1a1a]">
+                        <div className="flex items-center gap-2">
+                            <HelpCircle className="w-4 h-4 text-teal-400" />
+                            <h2 className="text-sm font-semibold text-white">How workflows work</h2>
+                        </div>
+                        <button onClick={() => setShowDocs(false)} className="text-gray-400 hover:text-white transition-colors">
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+
+                    {/* Content */}
+                    <div className="px-5 py-6 space-y-8 text-sm text-gray-300 leading-relaxed">
+
+                        {/* Overview */}
+                        <section className="space-y-3">
+                            <h3 className="text-white font-semibold text-base">Overview</h3>
+                            <p>A workflow is a <span className="text-white font-medium">directed graph</span> of nodes connected by edges. The agent moves from node to node as the conversation progresses. Each node has its own prompt, tools, and transition conditions.</p>
+                            <div className="rounded-lg border border-[#2a2a2a] bg-[#111] p-4 font-mono text-xs text-gray-400 space-y-1">
+                                <div>Start Call</div>
+                                <div className="pl-4 text-teal-400">↓ caller greets</div>
+                                <div>Qualify Intent</div>
+                                <div className="pl-4 text-teal-400">↓ wants to book</div>
+                                <div>Book Appointment  ← tools live here</div>
+                                <div className="pl-4 text-teal-400">↓ booking confirmed</div>
+                                <div>End Call</div>
+                            </div>
+                        </section>
+
+                        {/* Nodes */}
+                        <section className="space-y-3">
+                            <h3 className="text-white font-semibold text-base">Node types</h3>
+                            <div className="space-y-2">
+                                {[
+                                    { name: "Start Call", desc: "Entry point. First thing the agent says when a call connects." },
+                                    { name: "Agent Node", desc: "An LLM-powered conversation step. Has its own prompt, tools, and edges." },
+                                    { name: "Global Node", desc: "Instructions shared across all agent nodes — tone, company context, fallback behaviour." },
+                                    { name: "End Call", desc: "Hangs up the call. Can extract final variables before ending." },
+                                    { name: "Webhook", desc: "Fires an HTTP request when reached — CRM updates, notifications." },
+                                ].map(n => (
+                                    <div key={n.name} className="rounded-md border border-[#2a2a2a] bg-[#111] px-3 py-2">
+                                        <p className="text-white text-xs font-medium">{n.name}</p>
+                                        <p className="text-gray-400 text-xs mt-0.5">{n.desc}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+
+                        {/* Agent node */}
+                        <section className="space-y-3">
+                            <h3 className="text-white font-semibold text-base">Agent node fields</h3>
+                            <div className="space-y-3">
+                                <div>
+                                    <p className="text-white text-xs font-medium mb-1">Prompt</p>
+                                    <p className="text-gray-400 text-xs">The system instruction the LLM follows inside this node. Be explicit: what to ask, when to call a tool, when to transition.</p>
+                                </div>
+                                <div>
+                                    <p className="text-white text-xs font-medium mb-1">Tools</p>
+                                    <p className="text-gray-400 text-xs">Functions the agent can call in this node. Only attach tools relevant to this node's job — fewer tools = more reliable invocations.</p>
+                                </div>
+                                <div>
+                                    <p className="text-white text-xs font-medium mb-1">Variable Extraction</p>
+                                    <p className="text-gray-400 text-xs">Define structured fields to extract from the conversation (e.g. caller_name, preferred_time). Use <code className="bg-[#2a2a2a] px-1 rounded text-teal-400">{"{{variable_name}}"}</code> in later nodes.</p>
+                                </div>
+                                <div>
+                                    <p className="text-white text-xs font-medium mb-1">Allow Interruption</p>
+                                    <p className="text-gray-400 text-xs">On — agent stops mid-sentence when caller speaks. Off — agent finishes before listening (use for legal/compliance statements).</p>
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* Edges */}
+                        <section className="space-y-3">
+                            <h3 className="text-white font-semibold text-base">Edges (transitions)</h3>
+                            <p className="text-xs text-gray-400">Each edge becomes a callable function. The LLM decides when to call it based on the conversation and your condition.</p>
+                            <div className="rounded-md border border-[#2a2a2a] bg-[#111] px-3 py-2 space-y-1 text-xs">
+                                <p><span className="text-teal-400 font-medium">Label:</span> <span className="text-gray-300">appointment_confirmed</span></p>
+                                <p><span className="text-teal-400 font-medium">Condition:</span> <span className="text-gray-300">Caller has agreed to a specific date and time</span></p>
+                                <p><span className="text-teal-400 font-medium">Speech:</span> <span className="text-gray-300">Let me get that booked for you right away.</span></p>
+                            </div>
+                            <p className="text-xs text-gray-500">Name edges clearly — <code className="bg-[#2a2a2a] px-1 rounded text-teal-400">appointment_confirmed</code> is better than <code className="bg-[#2a2a2a] px-1 rounded text-gray-400">next</code>.</p>
+                        </section>
+
+                        {/* Calendar tool */}
+                        <section className="space-y-3">
+                            <h3 className="text-white font-semibold text-base">Calendar booking tool</h3>
+                            <p className="text-xs text-gray-400">Attach the <span className="text-white font-medium">Calendar Booking</span> tool to a node to give the agent these three functions:</p>
+                            <div className="space-y-2">
+                                {[
+                                    { fn: "check_availability", desc: "Returns free slots on a given date. Params: date (YYYY-MM-DD), duration_minutes." },
+                                    { fn: "book_appointment", desc: "Creates an appointment. Params: start_time, end_time, summary (required). Returns appointment_id." },
+                                    { fn: "cancel_appointment", desc: "Cancels a booking. Params: appointment_id (from book_appointment response)." },
+                                ].map(t => (
+                                    <div key={t.fn} className="rounded-md border border-[#2a2a2a] bg-[#111] px-3 py-2">
+                                        <p className="text-teal-400 font-mono text-xs font-medium">{t.fn}</p>
+                                        <p className="text-gray-400 text-xs mt-0.5">{t.desc}</p>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="rounded-md border border-teal-500/20 bg-teal-500/5 px-3 py-2 text-xs text-gray-300 space-y-1">
+                                <p className="text-teal-400 font-medium text-xs">Example booking node prompt</p>
+                                <p className="text-gray-400 font-mono text-[11px] leading-5">
+                                    {`Ask for their preferred date and time.\nAsk for their name.\nCall book_appointment with start_time, end_time,\nand summary "Appointment - {name}".\nConfirm and call end_call.`}
+                                </p>
+                            </div>
+                            <p className="text-xs text-gray-500">All appointments appear in the <span className="text-white">Calendar</span> page in the sidebar.</p>
+                        </section>
+
+                        {/* Prompt tips */}
+                        <section className="space-y-3">
+                            <h3 className="text-white font-semibold text-base">Prompt tips</h3>
+                            <ul className="space-y-2 text-xs text-gray-400 list-none">
+                                {[
+                                    "One job per node — don't put the whole conversation in one prompt.",
+                                    "Tell the agent explicitly when to call a tool and when to transition.",
+                                    "Enable Global Prompt on most nodes so the agent always knows company context.",
+                                    "Use {{variable_name}} to pass data extracted in earlier nodes.",
+                                    "Keep edge names descriptive — the LLM reads them to decide when to fire.",
+                                ].map((tip, i) => (
+                                    <li key={i} className="flex gap-2">
+                                        <span className="text-teal-400 shrink-0">→</span>
+                                        <span>{tip}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </section>
+
+                    </div>
+                </div>
+            </div>
+        )}
     );
 };
