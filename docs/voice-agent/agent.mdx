@@ -1,6 +1,120 @@
 ---
 title: "Agent Node"
-description: "Agent node contains the prompts that drives the conversation with the Voice Agent"
+description: "The core building block of every workflow — a conversation step powered by an LLM prompt, tools, and transition edges."
 ---
 
-The Edges connected with Agent Nodes are pathways that the LLMs can take depending on how the conversation has been going so far. 
+An **Agent Node** is a single stage of a conversation. Each node has its own prompt, its own set of tools, and its own edges (transitions) that tell the agent when and where to move next.
+
+A workflow is made up of multiple agent nodes chained together. The agent can only do what its current node's prompt and tools allow — it gets a fresh context when it enters each new node.
+
+## Anatomy of an agent node
+
+<img src="../images/agent-node.png" alt="Agent node fields" style={{border: "1px solid #e5e7eb", borderRadius: "8px", maxWidth: "100%"}} />
+
+### Prompt
+
+The system instruction the LLM follows while inside this node. Write it as direct instructions to the agent:
+
+```
+You are speaking with a caller who wants to book an appointment.
+
+1. Ask for their preferred date and time.
+2. Ask for their name if you don't have it yet.
+3. Once you have both, call book_appointment.
+4. Confirm the booking and say goodbye.
+```
+
+**Tips for good prompts:**
+- Be specific about what the agent should ask and in what order
+- Tell the agent explicitly when to call a tool
+- Tell the agent explicitly when to move to the next node (call the transition function)
+- Keep it focused — one job per node
+
+### Global Prompt
+
+Toggle **Add Global Prompt** to inject your [Global Node](/voice-agent/global) instructions into this node. Enable this on almost every agent node so the agent always knows the company context, tone, and language.
+
+### Tools
+
+Attach tools the agent can invoke while in this node. The LLM decides when to call them based on the conversation and your prompt.
+
+<Note>
+Only attach tools that are relevant to this node's job. Giving the agent too many tools increases the chance of the wrong one being called.
+</Note>
+
+Built-in tools available:
+- **End Call** — hangs up the call
+- **Call Transfer** — transfers to a phone number or SIP endpoint
+- **Calculator** — evaluates math expressions
+- **Calendar Booking** — books, checks, and cancels appointments
+
+Custom tools:
+- **HTTP API** — calls any REST endpoint
+- **MCP Tool** — connects to an MCP server
+
+### Knowledge Base
+
+Attach documents the agent can search during this node. The agent uses semantic search to find relevant information and answer questions from it.
+
+### Variable Extraction
+
+Define structured variables to extract from the conversation when the agent is in this node. Extracted variables are saved to the run's `gathered_context` and can be referenced in later nodes using `{{variable_name}}`.
+
+| Field | Description |
+|---|---|
+| Name | Variable key (e.g. `caller_name`) |
+| Type | `string`, `number`, `boolean` |
+| Description | What the LLM should look for |
+
+### Allow Interruption
+
+- **On (default)** — the agent stops speaking immediately when the caller speaks
+- **Off** — the agent finishes its sentence before listening
+
+Turn interruption off for critical disclosures or legal statements the agent must complete.
+
+## Edges (transitions)
+
+Edges connect this node to the next. Each edge becomes a callable function that the LLM invokes when the transition condition is met.
+
+| Field | Description |
+|---|---|
+| Label | The function name the LLM calls (e.g. `proceed_to_booking`) |
+| Condition | Natural language description of when to transition |
+| Transition Speech | Optional phrase the agent speaks before switching nodes |
+
+<Tip>
+Name your edges clearly — the LLM uses the label as a function name and reads the condition to decide when to call it. `appointment_confirmed` is better than `next`.
+</Tip>
+
+### Example edge setup
+
+```
+Label:      appointment_confirmed
+Condition:  The caller has agreed to a specific date and time for their appointment
+Speech:     Let me get that booked for you right away.
+```
+
+When the agent detects the caller has confirmed a time, it calls `appointment_confirmed` and moves to the booking node.
+
+## Example: Appointment booking flow
+
+Here is a complete two-node setup for booking appointments:
+
+**Node 1 — Qualify**
+
+| Field | Value |
+|---|---|
+| Prompt | "Greet the caller warmly. Find out if they are calling to book, reschedule, or cancel an appointment. If they want to book, confirm they are ready to proceed." |
+| Tools | — |
+| Edge | `ready_to_book` → "Caller confirms they want to book a new appointment" |
+
+**Node 2 — Book**
+
+| Field | Value |
+|---|---|
+| Prompt | "Ask for their preferred date and time. Ask for their name. Once you have both, call `book_appointment`. Confirm the booking and then call `end_call`." |
+| Tools | Calendar Booking, End Call |
+| Edge | — (terminal node) |
+
+The agent stays in Node 1 until the caller says they want to book. Then it transitions to Node 2, which has access to the booking tools.

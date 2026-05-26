@@ -1,0 +1,175 @@
+---
+title: "Calendar Booking"
+description: "Let your voice agent check availability, book appointments, and cancel bookings — stored in the Lynq calendar dashboard."
+---
+
+The **Calendar Booking** tool gives your agent three callable functions during a live call:
+
+| Function | What it does |
+|---|---|
+| `check_availability` | Returns available time slots on a given date |
+| `book_appointment` | Creates an appointment and saves it to the calendar |
+| `cancel_appointment` | Cancels an existing appointment by its ID |
+
+All appointments are stored in your **Calendar** dashboard (`/calendar`) and are visible immediately after booking.
+
+<Note>
+Google Calendar sync is optional. If you connect a Google account in **Settings → Integrations**, appointments will also sync there. If not connected, they are stored only in Lynq.
+</Note>
+
+## Setup
+
+### 1. Create the tool
+
+Go to **Tools** in the sidebar → **New Tool** → select category **Calendar Booking**. Give it a name (e.g. "Appointment Booker"). No URL or API key needed — it is a built-in tool.
+
+### 2. Attach it to a node
+
+In your workflow, open the agent node where booking should happen → add the Calendar Booking tool under **Tools**.
+
+<Warning>
+Only attach the Calendar Booking tool to the node where booking happens — not to every node. The agent will only try to book when it is in that node.
+</Warning>
+
+### 3. Write the node prompt
+
+Tell the agent explicitly when and how to use each function:
+
+```
+You are booking an appointment for the caller.
+
+1. Ask for their preferred date and time.
+2. Ask for their name if you do not already have it.
+3. Once you have both, call book_appointment with:
+   - start_time: ISO 8601 datetime (e.g. 2026-05-27T10:00:00Z)
+   - end_time: 30 minutes after start_time
+   - summary: "Appointment - {caller name}"
+4. After booking, confirm: "I've booked your appointment for [date] at [time]."
+5. Ask if there is anything else. If not, say goodbye and call end_call.
+```
+
+## Function reference
+
+### `check_availability`
+
+Checks what slots are free on a given date. Requires Google Calendar to be connected — if not connected, returns a message asking the agent to collect a preferred time from the caller instead.
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `date` | string | Yes | Date in ISO format (`YYYY-MM-DD`) |
+| `duration_minutes` | integer | No | Slot length in minutes. Default: `30` |
+
+**Example agent usage**
+
+```
+If the caller asks what times are available, call check_availability with the date they mention.
+```
+
+---
+
+### `book_appointment`
+
+Creates an appointment and saves it to the Lynq calendar. Returns an `appointment_id` the agent holds for the rest of the call (needed if the caller wants to cancel).
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `start_time` | string | Yes | Start datetime in ISO 8601 format (`2026-05-27T10:00:00Z`) |
+| `end_time` | string | Yes | End datetime in ISO 8601 format |
+| `summary` | string | Yes | Title of the appointment (e.g. "Appointment - John") |
+| `description` | string | No | Additional notes |
+| `attendee_email` | string | No | Email to invite (only used if Google Calendar is connected) |
+
+**Response**
+
+```json
+{
+  "success": true,
+  "appointment_id": "a1b2c3d4-...",
+  "summary": "Appointment - John",
+  "start": "2026-05-27T10:00:00Z",
+  "end": "2026-05-27T10:30:00Z",
+  "message": "Appointment booked for May 27 at 10:00 AM."
+}
+```
+
+**Example agent usage**
+
+```
+Once the caller confirms their preferred time, call book_appointment.
+Use their name as part of the summary.
+```
+
+---
+
+### `cancel_appointment`
+
+Cancels an appointment using the `appointment_id` returned by `book_appointment`. The agent holds this ID in context for the duration of the call.
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `appointment_id` | string | Yes | The UUID returned by `book_appointment` |
+
+**Response**
+
+```json
+{
+  "success": true,
+  "message": "Appointment cancelled successfully."
+}
+```
+
+**Example agent usage**
+
+```
+If the caller wants to cancel the appointment just booked, call cancel_appointment
+with the appointment_id you received earlier.
+```
+
+---
+
+## Full example node prompt
+
+For a dedicated booking node:
+
+```
+You are booking an appointment for the caller. Be warm and efficient.
+
+1. Ask for their preferred date and time if you do not already have it.
+2. Ask for their name if you do not already have it.
+3. Once you have both, call book_appointment with:
+   - start_time: their preferred time in ISO format (e.g. 2026-05-27T10:00:00Z)
+   - end_time: 30 minutes after start_time
+   - summary: "Appointment - {caller name}"
+4. After booking confirm it:
+   "I have booked your appointment for [date] at [time]. You will receive a 
+    confirmation shortly."
+5. Ask if there is anything else they need. If not, say a warm goodbye and 
+   call end_call.
+
+If the caller wants to cancel the appointment you just booked, call 
+cancel_appointment with the appointment_id from the booking response.
+```
+
+## Viewing appointments
+
+All booked appointments appear in the **Calendar** page in the sidebar. You can:
+- Browse by month
+- Click any day to see appointments for that day
+- Cancel an appointment directly from the dashboard
+- See the caller's name and phone number for each booking
+
+## Google Calendar sync (optional)
+
+To also sync appointments to Google Calendar:
+
+1. Go to **Settings → Integrations**
+2. Under **Google Calendar**, enter your Google Cloud OAuth credentials
+3. Click **Connect Google Calendar** and authorise access
+
+Once connected, every new booking will appear in both Lynq and Google Calendar. Cancellations are synced in both directions.
