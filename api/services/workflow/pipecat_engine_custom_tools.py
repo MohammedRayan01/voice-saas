@@ -336,11 +336,11 @@ class CustomToolManager:
             ),
             get_function_schema(
                 "cancel_appointment",
-                "Cancel an existing appointment by its event ID.",
+                "Cancel an existing appointment by its appointment ID.",
                 properties={
-                    "event_id": {"type": "string", "description": "Google Calendar event ID to cancel"},
+                    "appointment_id": {"type": "string", "description": "Appointment ID returned by book_appointment"},
                 },
-                required=["event_id"],
+                required=["appointment_id"],
             ),
         ]
 
@@ -348,7 +348,7 @@ class CustomToolManager:
         organization_id = await self.get_organization_id()
 
         async def check_availability_handler(function_call_params: FunctionCallParams) -> None:
-            logger.info(f"Google Calendar check_availability called: {function_call_params.arguments}")
+            logger.info(f"check_availability called: {function_call_params.arguments}")
             try:
                 date = function_call_params.arguments.get("date", "")
                 duration = function_call_params.arguments.get("duration_minutes", 30)
@@ -360,98 +360,129 @@ class CustomToolManager:
                         "count": len(slots),
                     })
                 else:
+                    # Google not connected or no slots — tell agent to ask caller to pick a time
                     await function_call_params.result_callback({
-                        "available": False,
-                        "message": "No available slots found for that date.",
+                        "available": True,
+                        "message": "Calendar availability check is not configured. Please ask the caller to suggest a preferred date and time and proceed to book it.",
                     })
             except Exception as e:
                 logger.error(f"check_availability failed: {e}")
-                await function_call_params.result_callback({"error": str(e)})
+                await function_call_params.result_callback({
+                    "available": True,
+                    "message": "Could not check availability. Ask the caller for their preferred time and book it directly.",
+                })
 
         async def book_appointment_handler(function_call_params: FunctionCallParams) -> None:
-            logger.info(f"Google Calendar book_appointment called: {function_call_params.arguments}")
+            logger.info(f"book_appointment called: {function_call_params.arguments}")
             try:
+                import uuid as _uuid
+                from datetime import datetime
+                from sqlalchemy import select
+                from api.db.models import AppointmentModel
                 args = function_call_params.arguments
-                result = await gcal.book_appointment(
-                    organization_id,
-                    start_iso=args["start_time"],
-                    end_iso=args["end_time"],
-                    summary=args["summary"],
-                    description=args.get("description", ""),
-                    attendee_email=args.get("attendee_email"),
-                )
-                if result:
-                    try:
-                        import uuid as _uuid
-                        from datetime import datetime
-                        from api.db.models import AppointmentModel
-                        ctx = self._engine._call_context_vars or {}
-                        caller_number = ctx.get("phone_number") or ctx.get("caller_number")
-                        caller_name = ctx.get("caller_name") or ctx.get("contact_name")
+                ctx = self._engine._call_context_vars or {}
+                caller_number = ctx.get("phone_number") or ctx.get("caller_number")
+                caller_name = ctx.get("caller_name") or ctx.get("contact_name")
+                appt_uuid = str(_uuid.uuid4())
+                start_dt = datetime.fromisoformat(args["start_time"].replace("Z", "+00:00"))
+                end_dt = datetime.fromisoformat(args["end_time"].replace("Z", "+00:00"))
+
+                # Save to Lynq calendar DB first
+                async with db_client.async_session() as session:
+                    appt = AppointmentModel(
+                        appointment_uuid=appt_uuid,
+                        organization_id=organization_id,
+                        workflow_run_id=self._engine._workflow_run_id,
+                        summary=args["summary"],
+                        caller_name=caller_name,
+                        caller_number=caller_number,
+                        start_time=start_dt,
+                        end_time=end_dt,
+                        status="scheduled",
+                        notes=args.get("description", ""),
+                    )
+                    session.add(appt)
+                    await session.commit()
+                    await session.refresh(appt)
+                    appt_id = appt.id
+
+                # Optionally sync to Google Calendar if org has it connected
+                try:
+                    gcal_result = await gcal.book_appointment(
+                        organization_id,
+                        start_iso=args["start_time"],
+                        end_iso=args["end_time"],
+                        summary=args["summary"],
+                        description=args.get("description", ""),
+                        attendee_email=args.get("attendee_email"),
+                    )
+                    if gcal_result:
+                        from sqlalchemy import update
                         async with db_client.async_session() as session:
-                            appt = AppointmentModel(
-                                appointment_uuid=str(_uuid.uuid4()),
-                                organization_id=organization_id,
-                                workflow_run_id=self._engine._workflow_run_id,
-                                google_event_id=result["event_id"],
-                                summary=result["summary"],
-                                caller_name=caller_name,
-                                caller_number=caller_number,
-                                start_time=datetime.fromisoformat(result["start"].replace("Z", "+00:00")),
-                                end_time=datetime.fromisoformat(result["end"].replace("Z", "+00:00")),
-                                status="scheduled",
+                            await session.execute(
+                                update(AppointmentModel)
+                                .where(AppointmentModel.id == appt_id)
+                                .values(google_event_id=gcal_result["event_id"])
                             )
-                            session.add(appt)
                             await session.commit()
-                    except Exception as db_err:
-                        logger.warning(f"Failed to save appointment to DB: {db_err}")
-                    await function_call_params.result_callback({
-                        "success": True,
-                        "event_id": result["event_id"],
-                        "summary": result["summary"],
-                        "start": result["start"],
-                        "end": result["end"],
-                        "message": f"Appointment booked successfully for {result['start']}.",
-                    })
-                else:
-                    await function_call_params.result_callback({
-                        "success": False,
-                        "message": "Failed to book appointment. Please try a different time.",
-                    })
+                except Exception as gcal_err:
+                    logger.info(f"Google Calendar sync skipped (not connected or error): {gcal_err}")
+
+                await function_call_params.result_callback({
+                    "success": True,
+                    "appointment_id": appt_uuid,
+                    "summary": args["summary"],
+                    "start": args["start_time"],
+                    "end": args["end_time"],
+                    "message": f"Appointment booked for {start_dt.strftime('%B %d at %I:%M %p')}.",
+                })
             except Exception as e:
                 logger.error(f"book_appointment failed: {e}")
                 await function_call_params.result_callback({"error": str(e)})
 
         async def cancel_appointment_handler(function_call_params: FunctionCallParams) -> None:
-            logger.info(f"Google Calendar cancel_appointment called: {function_call_params.arguments}")
+            logger.info(f"cancel_appointment called: {function_call_params.arguments}")
             try:
-                event_id = function_call_params.arguments.get("event_id", "")
-                success = await gcal.cancel_appointment(organization_id, event_id)
-                if success:
-                    try:
-                        from sqlalchemy import update
-                        from api.db.models import AppointmentModel
-                        async with db_client.async_session() as session:
-                            await session.execute(
-                                update(AppointmentModel)
-                                .where(
-                                    AppointmentModel.organization_id == organization_id,
-                                    AppointmentModel.google_event_id == event_id,
-                                )
-                                .values(status="cancelled")
-                            )
-                            await session.commit()
-                    except Exception as db_err:
-                        logger.warning(f"Failed to update appointment status in DB: {db_err}")
-                    await function_call_params.result_callback({
-                        "success": True,
-                        "message": "Appointment cancelled successfully.",
-                    })
-                else:
+                from sqlalchemy import select, update
+                from api.db.models import AppointmentModel
+                appt_uuid = function_call_params.arguments.get("appointment_id", "")
+
+                async with db_client.async_session() as session:
+                    result = await session.execute(
+                        select(AppointmentModel).where(
+                            AppointmentModel.appointment_uuid == appt_uuid,
+                            AppointmentModel.organization_id == organization_id,
+                        )
+                    )
+                    appt = result.scalar_one_or_none()
+
+                if not appt:
                     await function_call_params.result_callback({
                         "success": False,
-                        "message": "Could not cancel the appointment. It may not exist.",
+                        "message": "Appointment not found.",
                     })
+                    return
+
+                # Update DB status
+                async with db_client.async_session() as session:
+                    await session.execute(
+                        update(AppointmentModel)
+                        .where(AppointmentModel.appointment_uuid == appt_uuid)
+                        .values(status="cancelled")
+                    )
+                    await session.commit()
+
+                # Optionally cancel in Google Calendar
+                if appt.google_event_id:
+                    try:
+                        await gcal.cancel_appointment(organization_id, appt.google_event_id)
+                    except Exception as gcal_err:
+                        logger.info(f"Google Calendar cancel skipped: {gcal_err}")
+
+                await function_call_params.result_callback({
+                    "success": True,
+                    "message": "Appointment cancelled successfully.",
+                })
             except Exception as e:
                 logger.error(f"cancel_appointment failed: {e}")
                 await function_call_params.result_callback({"error": str(e)})
