@@ -95,6 +95,9 @@ class OrganizationConfigurationKey(Enum):
     GOOGLE_CALENDAR_CREDENTIALS = (
         "GOOGLE_CALENDAR_CREDENTIALS"  # OAuth tokens for Google Calendar integration
     )
+    GOOGLE_CALENDAR_OAUTH_APP = (
+        "GOOGLE_CALENDAR_OAUTH_APP"  # OAuth app credentials: client_id, client_secret, redirect_uri
+    )
 
 
 class WorkflowStatus(Enum):
