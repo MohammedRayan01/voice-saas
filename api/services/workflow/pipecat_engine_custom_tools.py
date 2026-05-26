@@ -381,6 +381,30 @@ class CustomToolManager:
                     attendee_email=args.get("attendee_email"),
                 )
                 if result:
+                    try:
+                        import uuid as _uuid
+                        from datetime import datetime
+                        from api.db.models import AppointmentModel
+                        ctx = self._engine._call_context_vars or {}
+                        caller_number = ctx.get("phone_number") or ctx.get("caller_number")
+                        caller_name = ctx.get("caller_name") or ctx.get("contact_name")
+                        async with db_client.async_session() as session:
+                            appt = AppointmentModel(
+                                appointment_uuid=str(_uuid.uuid4()),
+                                organization_id=organization_id,
+                                workflow_run_id=self._engine._workflow_run_id,
+                                google_event_id=result["event_id"],
+                                summary=result["summary"],
+                                caller_name=caller_name,
+                                caller_number=caller_number,
+                                start_time=datetime.fromisoformat(result["start"].replace("Z", "+00:00")),
+                                end_time=datetime.fromisoformat(result["end"].replace("Z", "+00:00")),
+                                status="scheduled",
+                            )
+                            session.add(appt)
+                            await session.commit()
+                    except Exception as db_err:
+                        logger.warning(f"Failed to save appointment to DB: {db_err}")
                     await function_call_params.result_callback({
                         "success": True,
                         "event_id": result["event_id"],
@@ -404,6 +428,21 @@ class CustomToolManager:
                 event_id = function_call_params.arguments.get("event_id", "")
                 success = await gcal.cancel_appointment(organization_id, event_id)
                 if success:
+                    try:
+                        from sqlalchemy import update
+                        from api.db.models import AppointmentModel
+                        async with db_client.async_session() as session:
+                            await session.execute(
+                                update(AppointmentModel)
+                                .where(
+                                    AppointmentModel.organization_id == organization_id,
+                                    AppointmentModel.google_event_id == event_id,
+                                )
+                                .values(status="cancelled")
+                            )
+                            await session.commit()
+                    except Exception as db_err:
+                        logger.warning(f"Failed to update appointment status in DB: {db_err}")
                     await function_call_params.result_callback({
                         "success": True,
                         "message": "Appointment cancelled successfully.",

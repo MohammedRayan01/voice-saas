@@ -5,6 +5,7 @@ import {
   ArrowUpCircle,
   AudioLines,
   Brain,
+  CalendarDays,
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
@@ -121,6 +122,11 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         title: "Contacts",
         url: "/contacts",
         icon: Users,
+      },
+      {
+        title: "Calendar",
+        url: "/calendar",
+        icon: CalendarDays,
       },
       {
         title: "Escalations",

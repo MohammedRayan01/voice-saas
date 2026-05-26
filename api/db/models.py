@@ -1305,3 +1305,27 @@ class ContactModel(Base):
         Index("ix_contacts_org_phone", "organization_id", "phone"),
         Index("ix_contacts_org_email", "organization_id", "email"),
     )
+
+
+class AppointmentModel(Base):
+    __tablename__ = "appointments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    appointment_uuid = Column(String(36), nullable=False, unique=True, index=True, default=lambda: str(__import__("uuid").uuid4()))
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    workflow_run_id = Column(Integer, ForeignKey("workflow_runs.id", ondelete="SET NULL"), nullable=True, index=True)
+    google_event_id = Column(String(255), nullable=True, index=True)
+    summary = Column(String(500), nullable=False)
+    caller_name = Column(String(255), nullable=True)
+    caller_number = Column(String(50), nullable=True)
+    start_time = Column(DateTime(timezone=True), nullable=False)
+    end_time = Column(DateTime(timezone=True), nullable=False)
+    status = Column(String(20), nullable=False, default="scheduled")  # scheduled | cancelled
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+    __table_args__ = (
+        Index("ix_appointments_org_start", "organization_id", "start_time"),
+        Index("ix_appointments_org_status", "organization_id", "status"),
+    )

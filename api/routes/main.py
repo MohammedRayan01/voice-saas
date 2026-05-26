@@ -6,6 +6,7 @@ from api.routes.agent_stream import router as agent_stream_router
 from api.routes.contacts import router as contacts_router
 from api.routes.escalations import router as escalations_router
 from api.routes.google_calendar import router as google_calendar_router
+from api.routes.appointments import router as appointments_router
 from api.routes.billing import router as billing_router
 from api.routes.webhooks import router as webhooks_router
 from api.routes.auth import router as auth_router
@@ -62,6 +63,7 @@ router.include_router(node_types_router)
 router.include_router(agent_stream_router)
 router.include_router(contacts_router)
 router.include_router(google_calendar_router)
+router.include_router(appointments_router)
 router.include_router(escalations_router)
 router.include_router(billing_router)
 router.include_router(webhooks_router)
