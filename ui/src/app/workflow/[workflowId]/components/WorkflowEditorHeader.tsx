@@ -235,6 +235,7 @@ export const WorkflowEditorHeader = ({
     };
 
     return (
+        <>
         <div className="flex items-center justify-between w-full h-14 px-4 bg-[#1a1a1a] border-b border-[#2a2a2a]">
             {/* Left section: Mobile menu + Back button + Workflow name */}
             <div className="flex items-center gap-3 mr-4">
@@ -674,5 +675,6 @@ export const WorkflowEditorHeader = ({
                 </div>
             </div>
         )}
+        </>
     );
 };
