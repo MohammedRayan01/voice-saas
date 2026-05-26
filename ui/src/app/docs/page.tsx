@@ -1496,9 +1496,7 @@ function SidebarSection({
   activeId: string;
   onSelect: (id: string) => void;
 }) {
-  const [open, setOpen] = useState(
-    section.items.some((i) => i.id === activeId) || true
-  );
+  const [open, setOpen] = useState<boolean>(true);
 
   return (
     <div className="mb-1">
