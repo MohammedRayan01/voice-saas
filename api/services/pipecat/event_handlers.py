@@ -366,6 +366,20 @@ def register_event_handlers(
 
         usage_info = pipeline_metrics_aggregator.get_all_usage_metrics_serialized()
 
+        # Tag realtime calls so the cost calculator can use duration-based pricing.
+        # Gemini Live doesn't emit MetricsFrame with token counts, so token-based
+        # pricing always returns $0. We fall back to per-second pricing instead.
+        try:
+            from api.services.pipecat.realtime.gemini_live import DograhGeminiLiveLLMService
+
+            if isinstance(engine.llm, DograhGeminiLiveLLMService):
+                realtime_model = getattr(
+                    getattr(engine.llm, "_settings", None), "model", None
+                ) or "default"
+                usage_info["realtime_model"] = realtime_model
+        except Exception as e:
+            logger.warning(f"Failed to tag realtime model in usage_info: {e}")
+
         logger.debug(
             f"Usage metrics: {usage_info}, Gathered context: {gathered_context}"
         )

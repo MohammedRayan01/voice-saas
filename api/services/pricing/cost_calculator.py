@@ -101,10 +101,22 @@ class CostCalculator:
             return Decimal("0")
         return pricing_model.calculate_cost(seconds)
 
+    def calculate_realtime_cost(
+        self, provider: str, model: str, duration_seconds: float
+    ) -> Decimal:
+        """Calculate cost for realtime audio models (e.g. Gemini Live) using duration."""
+        pricing_model = self.get_pricing_model(
+            "realtime", provider, model
+        ) or self.get_pricing_model("realtime", provider, "default")
+        if not pricing_model:
+            return Decimal("0")
+        return pricing_model.calculate_cost(duration_seconds)
+
     def calculate_total_cost(self, usage_info: Dict) -> Dict[str, Any]:
         llm_cost_total = Decimal("0")
         tts_cost_total = Decimal("0")
         stt_cost_total = Decimal("0")
+        realtime_cost_total = Decimal("0")
 
         # Calculate LLM costs
         llm_usage = usage_info.get("llm", {})
@@ -136,12 +148,24 @@ class CostCalculator:
             cost = self.calculate_stt_cost(provider, model, seconds)
             stt_cost_total += cost
 
-        total_cost = llm_cost_total + tts_cost_total + stt_cost_total
+        # Calculate realtime model costs (e.g. Gemini Live — no token counts available,
+        # billed per second of call duration instead).
+        realtime_model = usage_info.get("realtime_model")
+        if realtime_model:
+            from api.services.configuration.registry import ServiceProviders
+
+            duration = float(usage_info.get("call_duration_seconds", 0))
+            realtime_cost_total = self.calculate_realtime_cost(
+                ServiceProviders.GOOGLE_REALTIME, realtime_model, duration
+            )
+
+        total_cost = llm_cost_total + tts_cost_total + stt_cost_total + realtime_cost_total
 
         return {
             "llm_cost": float(llm_cost_total),
             "tts_cost": float(tts_cost_total),
             "stt_cost": float(stt_cost_total),
+            "realtime_cost": float(realtime_cost_total),
             "total": float(total_cost),
         }
 

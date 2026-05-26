@@ -6,6 +6,7 @@ from typing import Dict
 
 from .embeddings import EMBEDDINGS_PRICING
 from .llm import LLM_PRICING
+from .realtime import REALTIME_PRICING
 from .stt import STT_PRICING
 from .tts import TTS_PRICING
 
@@ -15,4 +16,5 @@ PRICING_REGISTRY: Dict = {
     "tts": TTS_PRICING,
     "stt": STT_PRICING,
     "embeddings": EMBEDDINGS_PRICING,
+    "realtime": REALTIME_PRICING,
 }
