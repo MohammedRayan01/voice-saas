@@ -170,6 +170,7 @@ export function WorkflowRunsTable({
                                                 )}
                                             </div>
                                         </TableHead>
+                                        <TableHead className="font-semibold">Cost</TableHead>
                                         <TableHead className="font-semibold">Disposition</TableHead>
                                         <TableHead className="font-semibold">Actions</TableHead>
                                     </TableRow>
@@ -196,6 +197,11 @@ export function WorkflowRunsTable({
                                             <TableCell className="text-sm">
                                                 {typeof run.cost_info?.call_duration_seconds === 'number'
                                                     ? `${run.cost_info.call_duration_seconds.toFixed(1)}s`
+                                                    : "-"}
+                                            </TableCell>
+                                            <TableCell className="text-sm font-mono">
+                                                {typeof run.cost_info?.total_cost_usd === 'number'
+                                                    ? `$${(run.cost_info.total_cost_usd as number).toFixed(4)}`
                                                     : "-"}
                                             </TableCell>
                                             <TableCell>
