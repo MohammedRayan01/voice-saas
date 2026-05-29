@@ -138,8 +138,8 @@ const PLANS = [
     cta: "Get started",
     color: "text-foreground",
     usage: [
-      { label: "WhatsApp AI replies", value: "3,000 / mo", note: "~100 chats per day" },
-      { label: "Broadcast messages", value: "1,500 / mo", note: "₹1.00 / msg extra" },
+      { label: "WhatsApp AI replies", value: "5,000 / mo", note: "~165 chats per day" },
+      { label: "Broadcast messages", value: "1,500 / mo", note: "₹1.30 / msg extra" },
       { label: "Contacts", value: "1,000" },
       { label: "Documents (knowledge base)", value: "25 docs" },
       { label: "Voice calls", value: "Not included" },
@@ -170,15 +170,15 @@ const PLANS = [
     color: "text-primary",
     usage: [
       { label: "WhatsApp AI replies", value: "8,000 / mo", note: "~260 chats per day" },
-      { label: "Broadcast messages", value: "4,000 / mo", note: "₹0.90 / msg extra" },
-      { label: "Voice call minutes", value: "600 min / mo", note: "₹6 / min extra" },
+      { label: "Broadcast messages", value: "4,000 / mo", note: "₹1.15 / msg extra" },
+      { label: "Voice call minutes", value: "600 min / mo", note: "≈ 170 AI calls · ₹6 / min extra" },
       { label: "Contacts", value: "25,000" },
       { label: "Documents (knowledge base)", value: "500 docs" },
     ] as UsageItem[],
     highlights: [
       "Everything in Receptionist",
       "AI answers & makes phone calls",
-      "600 voice minutes / month included",
+      "600 min / month ≈ 170 AI calls included",
       "Scores leads Hot / Warm / Cold automatically",
       "Sales pipeline & deal tracking",
       "Outbound call campaigns",
@@ -202,7 +202,7 @@ const PLANS = [
     usage: [
       { label: "WhatsApp AI replies", value: "Unlimited" },
       { label: "Broadcast messages", value: "Unlimited" },
-      { label: "Voice call minutes", value: "2,000 min / mo", note: "₹5 / min extra" },
+      { label: "Voice call minutes", value: "2,000 min / mo", note: "≈ 570 AI calls · ₹5 / min extra" },
       { label: "Contacts", value: "Unlimited" },
       { label: "Documents (knowledge base)", value: "Unlimited" },
     ] as UsageItem[],
@@ -257,8 +257,8 @@ const FEATURE_GROUPS: FeatureGroup[] = [
       },
       {
         label: "WhatsApp AI replies per month",
-        sub: "How many AI-handled chat turns are included",
-        starter: "3,000", growth: "8,000", pro: "Unlimited",
+        sub: "How many AI-handled chat turns are included (avg conversation = 3–5 turns)",
+        starter: "5,000", growth: "8,000", pro: "Unlimited",
       },
       {
         label: "Broadcast messages per month",
@@ -267,7 +267,8 @@ const FEATURE_GROUPS: FeatureGroup[] = [
       },
       {
         label: "Overage rate per extra broadcast",
-        starter: "₹1.00 / msg", growth: "₹0.90 / msg", pro: "Included",
+        sub: "Rates reviewed quarterly and adjusted with Meta pricing changes",
+        starter: "₹1.30 / msg", growth: "₹1.15 / msg", pro: "Included",
       },
       {
         label: "Automated follow-up sequences",
@@ -996,9 +997,9 @@ export default function PricingPage() {
               {[
                 {
                   label: "Extra broadcast message",
-                  sub: "Per WhatsApp marketing message sent beyond plan limit",
-                  starter: "₹1.00 / msg",
-                  growth: "₹0.90 / msg",
+                  sub: "Per WhatsApp marketing message beyond plan limit. Rate reviewed quarterly with Meta pricing.",
+                  starter: "₹1.30 / msg",
+                  growth: "₹1.15 / msg",
                   pro: "Included",
                 },
                 {
@@ -1010,7 +1011,7 @@ export default function PricingPage() {
                 },
                 {
                   label: "Extra voice minute",
-                  sub: "Per minute of AI phone call beyond plan limit",
+                  sub: "Per minute of AI phone call beyond plan limit (avg call = 3–4 min → ~₹18–24 per extra call on Tier 2)",
                   starter: "Not available",
                   growth: "₹6 / min",
                   pro: "₹5 / min",
@@ -1045,6 +1046,7 @@ export default function PricingPage() {
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
           Overage is charged at the end of each billing cycle. You can set a spending cap in your dashboard to prevent unexpected charges.
+          Broadcast rates are tied to Meta (WhatsApp) platform pricing and are reviewed quarterly — you will be notified 30 days before any change.
         </p>
       </div>
 
