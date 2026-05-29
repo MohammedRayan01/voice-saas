@@ -1,0 +1,42 @@
+# Auto-generated — never meaningful to index
+ui/src/client/
+ui/src/client/types.gen.ts
+ui/src/client/sdk.gen.ts
+ui/src/client/client.gen.ts
+
+# Alembic migration scripts — boilerplate SQL, not logic
+api/alembic/versions/
+
+# External docs (mdx) — creates doc-bias in queries, not codebase logic
+docs/
+
+# Node modules and build artifacts
+node_modules/
+ui/.next/
+ui/out/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Static assets — no code relationships
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.wav
+*.mp3
+*.mp4
+*.webm
+*.pdf
+
+# Lock files
+package-lock.json
+yarn.lock
+uv.lock
+poetry.lock
+
+# Test fixtures and snapshots
+api/tests/fixtures/

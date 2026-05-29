@@ -3,6 +3,7 @@ __pycache__
 .env
 .env.prod
 .env.test
+.env.graphify
 
 # Graphify generated outputs
 graphify_*.html
