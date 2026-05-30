@@ -391,9 +391,9 @@ const FEATURE_GROUPS: FeatureGroup[] = [
         starter: "25 docs", growth: "500 docs", pro: "Unlimited",
       },
       {
-        label: "Hindi & Indian language support",
-        sub: "AI speaks and understands Hindi. More Indian languages on higher plans.",
-        starter: "Hindi", growth: "Hindi + Tamil", pro: "5 languages",
+        label: "Indian language support",
+        sub: "Hindi on all plans. Sales Associate adds Tamil & Kannada. Sales Manager adds Telugu, Marathi & Bengali — AI auto-detects and switches language mid-conversation.",
+        starter: "Hindi", growth: "Hindi, Tamil, Kannada", pro: "Hindi, Tamil, Kannada, Telugu, Marathi, Bengali",
       },
       {
         label: "AI learns from corrections",
