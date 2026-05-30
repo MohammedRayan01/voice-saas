@@ -171,14 +171,14 @@ const PLANS = [
     usage: [
       { label: "WhatsApp AI replies", value: "8,000 / mo", note: "~260 chats per day" },
       { label: "Broadcast messages", value: "4,000 / mo", note: "₹1.15 / msg extra" },
-      { label: "Voice call minutes", value: "600 min / mo", note: "≈ 170 AI calls · ₹6 / min extra" },
+      { label: "Voice call minutes", value: "1,000 min / mo", note: "≈ 285 AI calls · ₹6 / min extra" },
       { label: "Contacts", value: "25,000" },
       { label: "Documents (knowledge base)", value: "500 docs" },
     ] as UsageItem[],
     highlights: [
       "Everything in Receptionist",
       "AI answers & makes phone calls",
-      "600 min / month ≈ 170 AI calls included",
+      "1,000 min / month ≈ 285 AI calls included",
       "Scores leads Hot / Warm / Cold automatically",
       "Sales pipeline & deal tracking",
       "Outbound call campaigns",
@@ -202,13 +202,13 @@ const PLANS = [
     usage: [
       { label: "WhatsApp AI replies", value: "Unlimited" },
       { label: "Broadcast messages", value: "Unlimited" },
-      { label: "Voice call minutes", value: "2,000 min / mo", note: "≈ 570 AI calls · ₹5 / min extra" },
+      { label: "Voice call minutes", value: "3,000 min / mo", note: "≈ 857 AI calls · ₹5 / min extra" },
       { label: "Contacts", value: "Unlimited" },
       { label: "Documents (knowledge base)", value: "Unlimited" },
     ] as UsageItem[],
     highlights: [
       "Everything in Sales Associate",
-      "2,000 voice minutes / month",
+      "3,000 voice minutes / month",
       "Multiple AI agents working together",
       "Unlimited contacts & broadcasts",
       "White-label — your brand, your domain",
@@ -339,7 +339,7 @@ const FEATURE_GROUPS: FeatureGroup[] = [
       {
         label: "Voice call minutes per month",
         sub: "How many minutes of AI phone calls are included",
-        starter: "—", growth: "600 min", pro: "2,000 min",
+        starter: "—", growth: "1,000 min", pro: "3,000 min",
       },
       {
         label: "Cost per extra minute",
@@ -742,7 +742,7 @@ const FEATURE_GROUPS: FeatureGroup[] = [
       },
       {
         label: "Onboarding call with founder",
-        sub: "Direct call with Rayhan (founder) to get you live within 48 hours",
+        sub: "Direct call with Rayhan (founder) to get you live within 7 days",
         starter: false, growth: true, pro: true,
       },
       {
@@ -793,7 +793,7 @@ export default function PricingPage() {
           14-day money-back guarantee · We set it up for you · No contracts
         </div>
         <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-          Your AI Employee, Live in 48 Hours
+          Your AI Employee, Live in 7 Days
         </h1>
         <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
           Lynq handles WhatsApp, your website, and phone calls — answering
@@ -1175,7 +1175,7 @@ export default function PricingPage() {
       <div className="border-t bg-muted/30">
         <div className="mx-auto max-w-4xl px-4 py-16 grid grid-cols-1 gap-8 sm:grid-cols-3 text-center">
           <div>
-            <div className="text-3xl font-bold text-foreground">48 hrs</div>
+            <div className="text-3xl font-bold text-foreground">7 days</div>
             <div className="mt-1 text-sm text-muted-foreground">
               From payment to your AI live on WhatsApp
             </div>
