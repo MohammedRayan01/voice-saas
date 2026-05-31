@@ -18,6 +18,7 @@ import {
   LogOut,
   type LucideIcon,
   Megaphone,
+  MessageSquare,
   Phone,
   Settings,
   TrendingUp,
@@ -88,6 +89,11 @@ const NAV_SECTIONS: SidebarNavSection[] = [
   {
     label: "BUILD",
     items: [
+      {
+        title: "WhatsApp",
+        url: "/whatsapp",
+        icon: MessageSquare,
+      },
       {
         title: "Voice Agents",
         url: "/workflow",
