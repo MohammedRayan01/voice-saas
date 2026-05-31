@@ -98,6 +98,12 @@ class OrganizationConfigurationKey(Enum):
     GOOGLE_CALENDAR_OAUTH_APP = (
         "GOOGLE_CALENDAR_OAUTH_APP"  # OAuth app credentials: client_id, client_secret, redirect_uri
     )
+    WHATSAPP_SYSTEM_PROMPT = (
+        "WHATSAPP_SYSTEM_PROMPT"  # System prompt used by the WhatsApp AI text engine
+    )
+    WHATSAPP_WORKFLOW_ID = (
+        "WHATSAPP_WORKFLOW_ID"  # ID of the workflow to use for WhatsApp AI replies
+    )
 
 
 class WorkflowStatus(Enum):

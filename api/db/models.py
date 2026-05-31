@@ -1329,3 +1329,28 @@ class AppointmentModel(Base):
         Index("ix_appointments_org_start", "organization_id", "start_time"),
         Index("ix_appointments_org_status", "organization_id", "status"),
     )
+
+
+class ChatSessionModel(Base):
+    """Stores per-contact WhatsApp conversation history for the AI text engine."""
+
+    __tablename__ = "chat_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(
+        Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    phone = Column(String(50), nullable=False)
+    # JSON array of {role: "user"|"assistant", content: str}
+    history = Column(JSON, nullable=False, default=list)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("organization_id", "phone", name="uq_chat_sessions_org_phone"),
+        Index("ix_chat_sessions_org_phone", "organization_id", "phone"),
+    )
