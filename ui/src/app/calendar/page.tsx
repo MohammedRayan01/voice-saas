@@ -71,8 +71,9 @@ export default function CalendarPage() {
         setLoading(true);
         try {
             const token = await getAccessToken();
-            const from = new Date(year, month, 1).toISOString();
-            const to = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
+            // Extend window by 1 day on each side to handle any timezone offset
+            const from = new Date(year, month, 1, 0, 0, 0).toISOString();
+            const to = new Date(year, month + 1, 1, 23, 59, 59).toISOString();
             const res = await fetch(
                 `${API_BASE}/api/v1/appointments?from_date=${encodeURIComponent(from)}&to_date=${encodeURIComponent(to)}&limit=200`,
                 { headers: { Authorization: `Bearer ${token}` } }
