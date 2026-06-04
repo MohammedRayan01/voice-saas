@@ -27,12 +27,20 @@ def upgrade() -> None:
     )
     op.create_index("ix_wa_tags_org", "wa_tags", ["organization_id"])
 
-    # ── contacts extension — add WhatsApp fields to existing contacts ───────
-    op.add_column("contacts", sa.Column("whatsapp_opt_in", sa.Boolean(), nullable=False, server_default="true"))
-    op.add_column("contacts", sa.Column("wa_last_seen", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("contacts", sa.Column("wa_avatar_url", sa.String(500), nullable=True))
-    op.add_column("contacts", sa.Column("company", sa.String(255), nullable=True))
-    op.add_column("contacts", sa.Column("email", sa.String(255), nullable=True))
+    # ── contacts extension — add WhatsApp fields (skip if already exist) ────
+    conn = op.get_bind()
+    existing = {row[0] for row in conn.execute(
+        sa.text("SELECT column_name FROM information_schema.columns WHERE table_name='contacts'")
+    )}
+    for col_name, col_def in [
+        ("whatsapp_opt_in", sa.Column("whatsapp_opt_in", sa.Boolean(), nullable=False, server_default="true")),
+        ("wa_last_seen", sa.Column("wa_last_seen", sa.DateTime(timezone=True), nullable=True)),
+        ("wa_avatar_url", sa.Column("wa_avatar_url", sa.String(500), nullable=True)),
+        ("company", sa.Column("company", sa.String(255), nullable=True)),
+        ("email", sa.Column("email", sa.String(255), nullable=True)),
+    ]:
+        if col_name not in existing:
+            op.add_column("contacts", col_def)
 
     # ── contact_tags ────────────────────────────────────────────────────────
     op.create_table(
