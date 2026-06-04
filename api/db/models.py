@@ -6,12 +6,14 @@ from sqlalchemy import (
     JSON,
     Boolean,
     Column,
+    Date,
     DateTime,
     Enum,
     Float,
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Table,
     Text,
@@ -1353,4 +1355,211 @@ class ChatSessionModel(Base):
     __table_args__ = (
         UniqueConstraint("organization_id", "phone", name="uq_chat_sessions_org_phone"),
         Index("ix_chat_sessions_org_phone", "organization_id", "phone"),
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# WhatsApp / CRM models (wacrm integration)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class WaTagModel(Base):
+    __tablename__ = "wa_tags"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    color = Column(String(20), nullable=False, default="#3b82f6")
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class ContactTagModel(Base):
+    __tablename__ = "contact_tags"
+
+    id = Column(Integer, primary_key=True, index=True)
+    contact_id = Column(Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=False)
+    tag_id = Column(Integer, ForeignKey("wa_tags.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+    __table_args__ = (
+        UniqueConstraint("contact_id", "tag_id", name="uq_contact_tags"),
+        Index("ix_contact_tags_contact", "contact_id"),
+        Index("ix_contact_tags_tag", "tag_id"),
+    )
+
+
+class ContactNoteModel(Base):
+    __tablename__ = "contact_notes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    contact_id = Column(Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=False, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    note_text = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class WhatsAppConfigModel(Base):
+    __tablename__ = "whatsapp_config"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, unique=True)
+    phone_number_id = Column(String(100), nullable=False)
+    waba_id = Column(String(100), nullable=True)
+    access_token = Column(Text, nullable=False)
+    verify_token = Column(String(100), nullable=True)
+    status = Column(String(20), nullable=False, default="disconnected")
+    connected_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+
+class MessageTemplateModel(Base):
+    __tablename__ = "message_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(200), nullable=False)
+    category = Column(String(50), nullable=False, default="Marketing")
+    language = Column(String(20), nullable=False, default="en_US")
+    header_type = Column(String(20), nullable=True)
+    header_content = Column(Text, nullable=True)
+    body_text = Column(Text, nullable=False)
+    footer_text = Column(Text, nullable=True)
+    buttons = Column(JSON, nullable=True)
+    status = Column(String(20), nullable=False, default="Draft")
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+
+class WaConversationModel(Base):
+    __tablename__ = "wa_conversations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    contact_id = Column(Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="open")  # open | pending | closed
+    assigned_agent_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    last_message_text = Column(Text, nullable=True)
+    last_message_at = Column(DateTime(timezone=True), nullable=True)
+    unread_count = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+    __table_args__ = (
+        Index("ix_wa_conversations_org_status", "organization_id", "status"),
+        Index("ix_wa_conversations_org_updated", "organization_id", "updated_at"),
+    )
+
+
+class WaMessageModel(Base):
+    __tablename__ = "wa_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("wa_conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    sender_type = Column(String(20), nullable=False)  # customer | agent | bot
+    sender_id = Column(Integer, nullable=True)
+    content_type = Column(String(20), nullable=False, default="text")
+    content_text = Column(Text, nullable=True)
+    media_url = Column(String(500), nullable=True)
+    template_name = Column(String(200), nullable=True)
+    wamid = Column(String(200), nullable=True, index=True)
+    status = Column(String(20), nullable=False, default="sent")
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+    __table_args__ = (
+        Index("ix_wa_messages_conversation", "conversation_id", "created_at"),
+    )
+
+
+class PipelineModel(Base):
+    __tablename__ = "pipelines"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(200), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class PipelineStageModel(Base):
+    __tablename__ = "pipeline_stages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pipeline_id = Column(Integer, ForeignKey("pipelines.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(200), nullable=False)
+    position = Column(Integer, nullable=False, default=0)
+    color = Column(String(20), nullable=False, default="#3b82f6")
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class DealModel(Base):
+    __tablename__ = "deals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    pipeline_id = Column(Integer, ForeignKey("pipelines.id", ondelete="CASCADE"), nullable=False, index=True)
+    stage_id = Column(Integer, ForeignKey("pipeline_stages.id", ondelete="RESTRICT"), nullable=False)
+    contact_id = Column(Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=False, index=True)
+    conversation_id = Column(Integer, ForeignKey("wa_conversations.id", ondelete="SET NULL"), nullable=True)
+    title = Column(String(300), nullable=False)
+    value = Column(Numeric(12, 2), nullable=False, default=0)
+    currency = Column(String(10), nullable=False, default="INR")
+    notes = Column(Text, nullable=True)
+    expected_close_date = Column(Date, nullable=True)
+    status = Column(String(20), nullable=False, default="active")
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+
+class WaBroadcastModel(Base):
+    __tablename__ = "wa_broadcasts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(300), nullable=False)
+    template_name = Column(String(200), nullable=False)
+    template_language = Column(String(20), nullable=False, default="en_US")
+    template_variables = Column(JSON, nullable=True)
+    audience_filter = Column(JSON, nullable=True)
+    scheduled_at = Column(DateTime(timezone=True), nullable=True)
+    status = Column(String(20), nullable=False, default="draft")
+    total_recipients = Column(Integer, nullable=False, default=0)
+    sent_count = Column(Integer, nullable=False, default=0)
+    delivered_count = Column(Integer, nullable=False, default=0)
+    read_count = Column(Integer, nullable=False, default=0)
+    replied_count = Column(Integer, nullable=False, default=0)
+    failed_count = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+
+class WaBroadcastRecipientModel(Base):
+    __tablename__ = "wa_broadcast_recipients"
+
+    id = Column(Integer, primary_key=True, index=True)
+    broadcast_id = Column(Integer, ForeignKey("wa_broadcasts.id", ondelete="CASCADE"), nullable=False, index=True)
+    contact_id = Column(Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String(20), nullable=False, default="pending")
+    wamid = Column(String(200), nullable=True)
+    sent_at = Column(DateTime(timezone=True), nullable=True)
+    delivered_at = Column(DateTime(timezone=True), nullable=True)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class WaAutomationModel(Base):
+    __tablename__ = "wa_automations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(300), nullable=False)
+    trigger_type = Column(String(50), nullable=False)
+    trigger_config = Column(JSON, nullable=False, default=dict)
+    steps = Column(JSON, nullable=False, default=list)
+    is_active = Column(Boolean, nullable=False, default=True)
+    run_count = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+    __table_args__ = (
+        Index("ix_wa_automations_org_active", "organization_id", "is_active"),
     )
