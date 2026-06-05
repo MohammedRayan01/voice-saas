@@ -8,7 +8,7 @@ from typing import List, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from loguru import logger
 from pydantic import BaseModel
-from sqlalchemy import select, update, func
+from sqlalchemy import select, update, func, delete, or_, cast, String
 
 from api.db import db_client
 from api.db.base_client import BaseDBClient
@@ -599,3 +599,319 @@ async def _execute_broadcast(broadcast_id: int, org_id: int) -> None:
             )
         )
         await s.commit()
+
+
+# ── Contacts CRUD ─────────────────────────────────────────────────────────────
+
+class ContactResponse(BaseModel):
+    id: int
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    company: Optional[str] = None
+    tags: List[str] = []
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ContactCreate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    company: Optional[str] = None
+    tags: List[str] = []
+
+
+@router.get("/contacts", response_model=List[ContactResponse])
+async def list_contacts(
+    search: Optional[str] = Query(None),
+    page: int = Query(0, ge=0),
+    page_size: int = Query(25, ge=1, le=100),
+    user: UserModel = Depends(get_user),
+):
+    org_id = user.selected_organization_id
+    async with _db.async_session() as s:
+        q = select(ContactModel).where(ContactModel.organization_id == org_id)
+        if search:
+            term = f"%{search}%"
+            q = q.where(
+                or_(
+                    ContactModel.first_name.ilike(term),
+                    ContactModel.last_name.ilike(term),
+                    ContactModel.phone.ilike(term),
+                    ContactModel.email.ilike(term),
+                    ContactModel.company.ilike(term),
+                )
+            )
+        q = q.order_by(ContactModel.created_at.desc()).offset(page * page_size).limit(page_size)
+        r = await s.execute(q)
+        return r.scalars().all()
+
+
+@router.post("/contacts", response_model=ContactResponse)
+async def create_contact(body: ContactCreate, user: UserModel = Depends(get_user)):
+    org_id = user.selected_organization_id
+    async with _db.async_session() as s:
+        c = ContactModel(
+            organization_id=org_id,
+            first_name=body.first_name,
+            last_name=body.last_name,
+            phone=body.phone,
+            email=body.email,
+            company=body.company,
+            tags=body.tags,
+        )
+        s.add(c)
+        await s.commit()
+        await s.refresh(c)
+        return c
+
+
+@router.put("/contacts/{contact_id}", response_model=ContactResponse)
+async def update_contact(contact_id: int, body: ContactCreate, user: UserModel = Depends(get_user)):
+    org_id = user.selected_organization_id
+    async with _db.async_session() as s:
+        r = await s.execute(
+            select(ContactModel).where(
+                ContactModel.id == contact_id,
+                ContactModel.organization_id == org_id,
+            )
+        )
+        c = r.scalar_one_or_none()
+        if not c:
+            raise HTTPException(status_code=404)
+        c.first_name = body.first_name
+        c.last_name = body.last_name
+        c.phone = body.phone
+        c.email = body.email
+        c.company = body.company
+        c.tags = body.tags
+        await s.commit()
+        await s.refresh(c)
+        return c
+
+
+@router.delete("/contacts/{contact_id}")
+async def delete_contact(contact_id: int, user: UserModel = Depends(get_user)):
+    org_id = user.selected_organization_id
+    async with _db.async_session() as s:
+        r = await s.execute(
+            select(ContactModel).where(
+                ContactModel.id == contact_id,
+                ContactModel.organization_id == org_id,
+            )
+        )
+        c = r.scalar_one_or_none()
+        if not c:
+            raise HTTPException(status_code=404)
+        await s.delete(c)
+        await s.commit()
+    return {"deleted": True}
+
+
+# ── Pipeline update/delete + Deals CRUD ──────────────────────────────────────
+
+class DealResponse(BaseModel):
+    id: int
+    pipeline_id: int
+    stage_id: int
+    contact_id: Optional[int] = None
+    title: str
+    value: float
+    currency: str = "INR"
+    notes: Optional[str] = None
+    expected_close_date: Optional[str] = None
+    status: str = "active"
+    contact_name: Optional[str] = None
+    contact_phone: Optional[str] = None
+    stage_name: Optional[str] = None
+    stage_color: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class DealCreate(BaseModel):
+    pipeline_id: int
+    stage_id: int
+    contact_id: Optional[int] = None
+    title: str
+    value: float = 0
+    currency: str = "INR"
+    notes: Optional[str] = None
+    expected_close_date: Optional[str] = None
+
+
+class DealUpdate(BaseModel):
+    stage_id: Optional[int] = None
+    contact_id: Optional[int] = None
+    title: Optional[str] = None
+    value: Optional[float] = None
+    currency: Optional[str] = None
+    notes: Optional[str] = None
+    expected_close_date: Optional[str] = None
+    status: Optional[str] = None
+
+
+@router.put("/pipelines/{pipeline_id}")
+async def update_pipeline_name(pipeline_id: int, body: PipelineSchema, user: UserModel = Depends(get_user)):
+    org_id = user.selected_organization_id
+    async with _db.async_session() as s:
+        r = await s.execute(
+            select(PipelineModel).where(
+                PipelineModel.id == pipeline_id,
+                PipelineModel.organization_id == org_id,
+            )
+        )
+        p = r.scalar_one_or_none()
+        if not p:
+            raise HTTPException(status_code=404)
+        p.name = body.name
+        await s.commit()
+        stages_r = await s.execute(
+            select(PipelineStageModel).where(PipelineStageModel.pipeline_id == p.id)
+            .order_by(PipelineStageModel.position)
+        )
+        stages = stages_r.scalars().all()
+        return {"id": p.id, "name": p.name, "created_at": p.created_at, "stages": [
+            {"id": st.id, "name": st.name, "position": st.position, "color": st.color}
+            for st in stages
+        ]}
+
+
+@router.delete("/pipelines/{pipeline_id}")
+async def delete_pipeline_by_id(pipeline_id: int, user: UserModel = Depends(get_user)):
+    org_id = user.selected_organization_id
+    async with _db.async_session() as s:
+        r = await s.execute(
+            select(PipelineModel).where(
+                PipelineModel.id == pipeline_id,
+                PipelineModel.organization_id == org_id,
+            )
+        )
+        p = r.scalar_one_or_none()
+        if not p:
+            raise HTTPException(status_code=404)
+        await s.delete(p)
+        await s.commit()
+    return {"deleted": True}
+
+
+@router.get("/pipelines/{pipeline_id}/deals", response_model=List[DealResponse])
+async def list_deals(pipeline_id: int, user: UserModel = Depends(get_user)):
+    org_id = user.selected_organization_id
+    async with _db.async_session() as s:
+        r = await s.execute(
+            select(DealModel).where(
+                DealModel.pipeline_id == pipeline_id,
+                DealModel.organization_id == org_id,
+            ).order_by(DealModel.created_at.asc())
+        )
+        deals = r.scalars().all()
+        result = []
+        for d in deals:
+            contact_name = contact_phone = stage_name = stage_color = None
+            if d.contact_id:
+                cr = await s.execute(select(ContactModel).where(ContactModel.id == d.contact_id))
+                c = cr.scalar_one_or_none()
+                if c:
+                    contact_name = f"{c.first_name or ''} {c.last_name or ''}".strip() or c.phone
+                    contact_phone = c.phone
+            sr = await s.execute(select(PipelineStageModel).where(PipelineStageModel.id == d.stage_id))
+            stage = sr.scalar_one_or_none()
+            if stage:
+                stage_name = stage.name
+                stage_color = stage.color
+            result.append(DealResponse(
+                id=d.id, pipeline_id=d.pipeline_id, stage_id=d.stage_id,
+                contact_id=d.contact_id, title=d.title, value=float(d.value),
+                currency=d.currency, notes=d.notes,
+                expected_close_date=str(d.expected_close_date) if d.expected_close_date else None,
+                status=d.status, contact_name=contact_name, contact_phone=contact_phone,
+                stage_name=stage_name, stage_color=stage_color, created_at=d.created_at,
+            ))
+        return result
+
+
+@router.post("/deals", response_model=DealResponse)
+async def create_deal(body: DealCreate, user: UserModel = Depends(get_user)):
+    org_id = user.selected_organization_id
+    async with _db.async_session() as s:
+        d = DealModel(
+            organization_id=org_id,
+            pipeline_id=body.pipeline_id,
+            stage_id=body.stage_id,
+            contact_id=body.contact_id,
+            title=body.title,
+            value=body.value,
+            currency=body.currency,
+            notes=body.notes,
+            expected_close_date=body.expected_close_date,
+        )
+        s.add(d)
+        await s.commit()
+        await s.refresh(d)
+        return DealResponse(
+            id=d.id, pipeline_id=d.pipeline_id, stage_id=d.stage_id,
+            contact_id=d.contact_id, title=d.title, value=float(d.value),
+            currency=d.currency, notes=d.notes,
+            expected_close_date=str(d.expected_close_date) if d.expected_close_date else None,
+            status=d.status, created_at=d.created_at,
+        )
+
+
+@router.put("/deals/{deal_id}", response_model=DealResponse)
+async def update_deal(deal_id: int, body: DealUpdate, user: UserModel = Depends(get_user)):
+    org_id = user.selected_organization_id
+    async with _db.async_session() as s:
+        r = await s.execute(
+            select(DealModel).where(DealModel.id == deal_id, DealModel.organization_id == org_id)
+        )
+        d = r.scalar_one_or_none()
+        if not d:
+            raise HTTPException(status_code=404)
+        if body.stage_id is not None:
+            d.stage_id = body.stage_id
+        if body.contact_id is not None:
+            d.contact_id = body.contact_id
+        if body.title is not None:
+            d.title = body.title
+        if body.value is not None:
+            d.value = body.value
+        if body.currency is not None:
+            d.currency = body.currency
+        if body.notes is not None:
+            d.notes = body.notes
+        if body.expected_close_date is not None:
+            d.expected_close_date = body.expected_close_date
+        if body.status is not None:
+            d.status = body.status
+        await s.commit()
+        await s.refresh(d)
+        return DealResponse(
+            id=d.id, pipeline_id=d.pipeline_id, stage_id=d.stage_id,
+            contact_id=d.contact_id, title=d.title, value=float(d.value),
+            currency=d.currency, notes=d.notes,
+            expected_close_date=str(d.expected_close_date) if d.expected_close_date else None,
+            status=d.status, created_at=d.created_at,
+        )
+
+
+@router.delete("/deals/{deal_id}")
+async def delete_deal(deal_id: int, user: UserModel = Depends(get_user)):
+    org_id = user.selected_organization_id
+    async with _db.async_session() as s:
+        r = await s.execute(
+            select(DealModel).where(DealModel.id == deal_id, DealModel.organization_id == org_id)
+        )
+        d = r.scalar_one_or_none()
+        if not d:
+            raise HTTPException(status_code=404)
+        await s.delete(d)
+        await s.commit()
+    return {"deleted": True}
