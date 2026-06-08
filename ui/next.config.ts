@@ -40,6 +40,6 @@ export default process.env.NEXT_PUBLIC_SENTRY_DSN
       tunnelRoute: "/monitoring",
       disableLogger: true,
       automaticVercelMonitors: true,
-      disableSourceMapUpload: true,
+      sourcemaps: { disable: true },
     })
   : nextConfig;
