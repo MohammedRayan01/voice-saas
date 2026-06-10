@@ -49,6 +49,7 @@ from api.tasks.s3_upload import (
     process_workflow_completion,
     upload_voicemail_audio_to_s3,
 )
+from api.tasks.whatsapp_tasks import execute_delayed_automation_step
 
 
 class WorkerSettings:
@@ -59,6 +60,7 @@ class WorkerSettings:
         sync_campaign_source,
         process_campaign_batch,
         process_knowledge_base_document,
+        execute_delayed_automation_step,
     ]
     cron_jobs = []
     redis_settings = REDIS_SETTINGS

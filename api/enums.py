@@ -104,6 +104,18 @@ class OrganizationConfigurationKey(Enum):
     WHATSAPP_WORKFLOW_ID = (
         "WHATSAPP_WORKFLOW_ID"  # ID of the workflow to use for WhatsApp AI replies
     )
+    INDUSTRY_TYPE = (
+        "INDUSTRY_TYPE"  # Industry pack type: "resort" | "real_estate" | "hr" | "law_firm"
+    )
+    INDUSTRY_CONFIG = (
+        "INDUSTRY_CONFIG"  # JSON blob of wizard answers (business_name, hours, room_types, etc.)
+    )
+    BUSINESS_HOURS = (
+        "BUSINESS_HOURS"  # {timezone, slots: [{day, start, end}]} for after-hours handling
+    )
+    AFTER_HOURS_MESSAGE = (
+        "AFTER_HOURS_MESSAGE"  # Message to send when a WhatsApp message arrives outside business hours
+    )
 
 
 class WorkflowStatus(Enum):

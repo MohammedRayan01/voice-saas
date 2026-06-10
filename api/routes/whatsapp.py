@@ -915,3 +915,69 @@ async def delete_deal(deal_id: int, user: UserModel = Depends(get_user)):
         await s.delete(d)
         await s.commit()
     return {"deleted": True}
+
+
+# ── Industry Packs ─────────────────────────────────────────────────────────────
+
+class PackInstallRequest(BaseModel):
+    config: dict
+
+
+class PackReconfigureRequest(BaseModel):
+    config: dict
+
+
+@router.get("/packs")
+async def list_packs(user: UserModel = Depends(get_user)):
+    """List all available industry packs."""
+    from api.services.whatsapp.pack_installer import pack_installer
+    return {"packs": pack_installer.list_packs()}
+
+
+@router.post("/packs/{pack_id}/install")
+async def install_pack(
+    pack_id: str,
+    body: PackInstallRequest,
+    user: UserModel = Depends(get_user),
+):
+    """Install an industry pack for the org. Runs the 5-step wizard installer."""
+    from api.services.whatsapp.pack_installer import pack_installer
+    org_id = user.selected_organization_id
+    try:
+        result = await pack_installer.install(org_id, pack_id, body.config)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return result
+
+
+@router.get("/packs/installed")
+async def get_installed_pack(user: UserModel = Depends(get_user)):
+    """Get the currently installed pack for this org."""
+    from api.services.whatsapp.pack_installer import pack_installer
+    installed = await pack_installer.get_installed(user.selected_organization_id)
+    if not installed:
+        return {"installed": False}
+    return installed
+
+
+@router.put("/packs/installed")
+async def reconfigure_pack(
+    body: PackReconfigureRequest,
+    user: UserModel = Depends(get_user),
+):
+    """Update wizard config without reinstalling automations (re-generates system prompt)."""
+    from api.services.whatsapp.pack_installer import pack_installer
+    org_id = user.selected_organization_id
+    try:
+        result = await pack_installer.reconfigure(org_id, body.config)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return result
+
+
+@router.delete("/packs/installed")
+async def uninstall_pack(user: UserModel = Depends(get_user)):
+    """Uninstall the current industry pack (removes pack-created automations and pipeline)."""
+    from api.services.whatsapp.pack_installer import pack_installer
+    await pack_installer.uninstall(user.selected_organization_id)
+    return {"uninstalled": True}

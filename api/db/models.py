@@ -1563,3 +1563,26 @@ class WaAutomationModel(Base):
     __table_args__ = (
         Index("ix_wa_automations_org_active", "organization_id", "is_active"),
     )
+
+
+class ScheduledAutomationRunModel(Base):
+    """Tracks delay/drip automation steps that are scheduled to run at a future time.
+    Enables reliable multi-day drip sequences that survive worker restarts.
+    """
+    __tablename__ = "scheduled_automation_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    automation_id = Column(Integer, ForeignKey("wa_automations.id", ondelete="CASCADE"), nullable=False, index=True)
+    phone_number = Column(String(50), nullable=False)
+    step_index = Column(Integer, nullable=False)
+    context_json = Column(JSON, nullable=False, default=dict)
+    run_at = Column(DateTime(timezone=True), nullable=False)
+    status = Column(String(20), nullable=False, default="pending")  # pending | running | done | failed
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+    __table_args__ = (
+        Index("ix_scheduled_automation_runs_org_status", "organization_id", "status"),
+        Index("ix_scheduled_automation_runs_run_at", "run_at"),
+    )

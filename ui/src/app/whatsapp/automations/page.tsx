@@ -37,7 +37,10 @@ import logger from '@/lib/logger';
 const API = process.env.NEXT_PUBLIC_BACKEND_URL ?? '';
 
 type TriggerType = 'new_message_received' | 'conversation_opened' | 'conversation_closed' | 'keyword_match';
-type StepType = 'send_message' | 'send_template' | 'ai_reply' | 'close_conversation' | 'add_tag' | 'assign_conversation';
+type StepType =
+    | 'send_message' | 'send_template' | 'ai_reply' | 'close_conversation'
+    | 'add_tag' | 'assign_conversation'
+    | 'delay' | 'condition' | 'create_deal' | 'update_contact' | 'send_voice_call';
 
 interface AutomationStep { step_type: StepType; step_config: Record<string, string>; }
 interface Automation {
@@ -54,9 +57,20 @@ const TRIGGER_LABELS: Record<TriggerType, string> = {
 };
 
 const STEP_LABELS: Record<StepType, string> = {
-    send_message: 'Send message', send_template: 'Send template', ai_reply: 'AI auto-reply',
-    close_conversation: 'Close conversation', add_tag: 'Add tag', assign_conversation: 'Assign conversation',
+    send_message: 'Send message',
+    send_template: 'Send template',
+    ai_reply: 'AI auto-reply',
+    close_conversation: 'Close conversation',
+    add_tag: 'Add tag',
+    assign_conversation: 'Assign conversation',
+    delay: 'Wait / Delay',
+    condition: 'Condition (if/else)',
+    create_deal: 'Create deal',
+    update_contact: 'Update contact fields',
+    send_voice_call: 'Trigger voice call',
 };
+
+const VARIABLE_HINTS = ['{contact.first_name}', '{contact.phone}', '{contact.custom.budget}', '{collected.room_type}'];
 
 const emptyStep = (): AutomationStep => ({ step_type: 'send_message', step_config: { text: '' } });
 const emptyForm = () => ({ name: '', trigger_type: 'new_message_received' as TriggerType, trigger_config: {} as Record<string, string>, steps: [emptyStep()], is_active: true });
@@ -66,6 +80,23 @@ function StepEditor({ step, index, onChange, onRemove, canRemove }: {
     onChange: (s: AutomationStep) => void; onRemove: () => void; canRemove: boolean;
 }) {
     const setConfig = (key: string, val: string) => onChange({ ...step, step_config: { ...step.step_config, [key]: val } });
+
+    const insertVariable = (field: string, variable: string) => {
+        const current = step.step_config[field] ?? '';
+        setConfig(field, current + variable);
+    };
+
+    const VariableHints = ({ field }: { field: string }) => (
+        <div className="flex flex-wrap gap-1 mt-1">
+            {VARIABLE_HINTS.map(v => (
+                <button key={v} type="button" onClick={() => insertVariable(field, v)}
+                    className="text-xs px-1.5 py-0.5 rounded border border-slate-700 text-slate-500 hover:text-violet-400 hover:border-violet-500/50 transition-colors">
+                    {v}
+                </button>
+            ))}
+        </div>
+    );
+
     return (
         <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-3 space-y-3">
             <div className="flex items-center justify-between">
@@ -79,12 +110,18 @@ function StepEditor({ step, index, onChange, onRemove, canRemove }: {
             <Select value={step.step_type} onValueChange={v => onChange({ step_type: v as StepType, step_config: {} })}>
                 <SelectTrigger className="h-8 text-sm border-slate-700 bg-slate-800 text-slate-100"><SelectValue /></SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700">
-                    {(Object.keys(STEP_LABELS) as StepType[]).map(k => <SelectItem key={k} value={k} className="text-slate-200 focus:bg-slate-700">{STEP_LABELS[k]}</SelectItem>)}
+                    {(Object.keys(STEP_LABELS) as StepType[]).map(k => (
+                        <SelectItem key={k} value={k} className="text-slate-200 focus:bg-slate-700">{STEP_LABELS[k]}</SelectItem>
+                    ))}
                 </SelectContent>
             </Select>
+
             {step.step_type === 'send_message' && (
-                <textarea rows={2} value={step.step_config.text ?? ''} onChange={e => setConfig('text', e.target.value)}
-                    placeholder="Hello! How can I help?" className="w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-500/50 resize-none" />
+                <div>
+                    <textarea rows={2} value={step.step_config.text ?? ''} onChange={e => setConfig('text', e.target.value)}
+                        placeholder="Hello {contact.first_name}! How can I help?" className="w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-500/50 resize-none" />
+                    <VariableHints field="text" />
+                </div>
             )}
             {step.step_type === 'send_template' && (
                 <div className="grid grid-cols-2 gap-2">
@@ -93,9 +130,73 @@ function StepEditor({ step, index, onChange, onRemove, canRemove }: {
                 </div>
             )}
             {step.step_type === 'add_tag' && (
-                <Input placeholder="new-lead" value={step.step_config.tag ?? ''} onChange={e => setConfig('tag', e.target.value)} className="h-8 text-sm border-slate-700 bg-slate-800 text-white" />
+                <Input placeholder="hot-lead" value={step.step_config.tag ?? ''} onChange={e => setConfig('tag', e.target.value)} className="h-8 text-sm border-slate-700 bg-slate-800 text-white" />
             )}
-            {['ai_reply', 'close_conversation', 'assign_conversation'].includes(step.step_type) && (
+            {step.step_type === 'assign_conversation' && (
+                <Input placeholder="agent@yourcompany.com" value={step.step_config.agent_email ?? ''} onChange={e => setConfig('agent_email', e.target.value)} className="h-8 text-sm border-slate-700 bg-slate-800 text-white" />
+            )}
+            {step.step_type === 'delay' && (
+                <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                        <label className="text-xs text-slate-400">Hours</label>
+                        <Input type="number" min="0" placeholder="0" value={step.step_config.hours ?? ''} onChange={e => setConfig('hours', e.target.value)} className="h-8 text-sm border-slate-700 bg-slate-800 text-white" />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-xs text-slate-400">Days</label>
+                        <Input type="number" min="0" placeholder="0" value={step.step_config.days ?? ''} onChange={e => setConfig('days', e.target.value)} className="h-8 text-sm border-slate-700 bg-slate-800 text-white" />
+                    </div>
+                    <p className="col-span-2 text-xs text-slate-500">Next step will run after this delay. Automation pauses here.</p>
+                </div>
+            )}
+            {step.step_type === 'condition' && (
+                <div className="space-y-2">
+                    <div className="grid grid-cols-3 gap-2">
+                        <Input placeholder="contact.custom.score" value={step.step_config.field ?? ''} onChange={e => setConfig('field', e.target.value)} className="h-8 text-sm border-slate-700 bg-slate-800 text-white" />
+                        <Select value={step.step_config.op ?? 'eq'} onValueChange={v => setConfig('op', v)}>
+                            <SelectTrigger className="h-8 text-sm border-slate-700 bg-slate-800 text-slate-100"><SelectValue /></SelectTrigger>
+                            <SelectContent className="bg-slate-800 border-slate-700">
+                                {[['eq','='],['neq','≠'],['gte','≥'],['lte','≤'],['gt','>'],['lt','<'],['contains','contains']].map(([v,l]) => (
+                                    <SelectItem key={v} value={v} className="text-slate-200 focus:bg-slate-700">{l}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Input placeholder="70" value={step.step_config.value ?? ''} onChange={e => setConfig('value', e.target.value)} className="h-8 text-sm border-slate-700 bg-slate-800 text-white" />
+                    </div>
+                    <p className="text-xs text-slate-500">If condition is false, automation stops. If true, continues to next step.</p>
+                </div>
+            )}
+            {step.step_type === 'create_deal' && (
+                <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                        <label className="text-xs text-slate-400">Pipeline name</label>
+                        <Input placeholder="Bookings" value={step.step_config.pipeline ?? ''} onChange={e => setConfig('pipeline', e.target.value)} className="h-8 text-sm border-slate-700 bg-slate-800 text-white" />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-xs text-slate-400">Stage name</label>
+                        <Input placeholder="New Inquiry" value={step.step_config.stage ?? ''} onChange={e => setConfig('stage', e.target.value)} className="h-8 text-sm border-slate-700 bg-slate-800 text-white" />
+                    </div>
+                    <div className="col-span-2 space-y-1">
+                        <label className="text-xs text-slate-400">Deal title</label>
+                        <Input placeholder="{contact.first_name} - Booking" value={step.step_config.title ?? ''} onChange={e => setConfig('title', e.target.value)} className="h-8 text-sm border-slate-700 bg-slate-800 text-white" />
+                        <VariableHints field="title" />
+                    </div>
+                </div>
+            )}
+            {step.step_type === 'update_contact' && (
+                <div className="space-y-2">
+                    <textarea rows={3} value={step.step_config.fields_json ?? ''} onChange={e => setConfig('fields_json', e.target.value)}
+                        placeholder={'{"lead_score": "80", "room_type": "{collected.room_type}"}'}
+                        className="w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 font-mono focus:outline-none focus:border-violet-500/50 resize-none" />
+                    <p className="text-xs text-slate-500">JSON object. Keys matching contact fields (first_name, email, etc.) update the contact directly. Others go into custom_fields.</p>
+                </div>
+            )}
+            {step.step_type === 'send_voice_call' && (
+                <div className="space-y-1">
+                    <label className="text-xs text-slate-400">Voice Workflow ID</label>
+                    <Input placeholder="{config.voice_workflow_id} or paste workflow ID" value={step.step_config.workflow_id ?? ''} onChange={e => setConfig('workflow_id', e.target.value)} className="h-8 text-sm border-slate-700 bg-slate-800 text-white" />
+                </div>
+            )}
+            {['ai_reply', 'close_conversation'].includes(step.step_type) && (
                 <p className="text-xs text-slate-500 italic">No additional configuration required.</p>
             )}
         </div>
@@ -229,9 +330,13 @@ export default function AutomationsPage() {
                                         {a.steps.map((step, i) => (
                                             <div key={i} className="flex items-start gap-2 text-sm">
                                                 <span className="text-xs text-slate-600 font-mono w-5 mt-0.5">{i + 1}.</span>
-                                                <span className="text-slate-300 font-medium">{STEP_LABELS[step.step_type]}</span>
+                                                <span className="text-slate-300 font-medium">{STEP_LABELS[step.step_type] ?? step.step_type}</span>
                                                 {step.step_config.text && <span className="text-slate-500 truncate max-w-xs">— {step.step_config.text}</span>}
                                                 {step.step_config.template_name && <span className="text-slate-500">— {step.step_config.template_name}</span>}
+                                                {step.step_config.tag && <span className="text-slate-500">— {step.step_config.tag}</span>}
+                                                {step.step_config.hours && <span className="text-slate-500">— {step.step_config.hours}h</span>}
+                                                {step.step_config.days && <span className="text-slate-500">— {step.step_config.days}d</span>}
+                                                {step.step_config.pipeline && <span className="text-slate-500">— {step.step_config.pipeline} / {step.step_config.stage}</span>}
                                             </div>
                                         ))}
                                     </div>
