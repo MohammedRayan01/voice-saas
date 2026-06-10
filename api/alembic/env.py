@@ -8,10 +8,10 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from api.constants import DATABASE_URL
-
-# Add parent directory to path
+# Add project root to path before importing api modules
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from api.constants import DATABASE_URL
 
 # Interpret the config file for Python logging.
 config = context.config
