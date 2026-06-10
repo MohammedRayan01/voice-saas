@@ -179,7 +179,7 @@ export default function IndustryPackWizard({
                                     ✅ {(installResult as Record<string, unknown>).automations_created as number} automations
                                 </p>
                             )}
-                            {(installResult as Record<string, unknown>).pipeline_created && (
+                            {!!(installResult as Record<string, unknown>).pipeline_created && (
                                 <p className="text-xs text-muted-foreground">✅ 1 booking pipeline with 6 stages</p>
                             )}
                             <p className="text-xs text-muted-foreground">✅ AI system prompt configured</p>
