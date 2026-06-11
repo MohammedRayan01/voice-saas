@@ -24,9 +24,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
-from api.constants import REDIS_URL
+from api.constants import APP_ROOT_DIR, REDIS_URL
 from api.mcp_server import mcp
 from api.routes.main import router as main_router
 from api.services.pipecat.tracing_config import (
@@ -105,3 +106,8 @@ app.include_router(api_router, prefix=API_PREFIX)
 # Mounted under /api/v1 so existing reverse-proxy rules (nginx etc.) route it
 # without any extra configuration.
 app.mount(f"{API_PREFIX}/mcp", mcp_app)
+
+# Serve widget JS files from the API so the embed script URL uses the same
+# HTTPS domain as the backend — avoids mixed-content issues when the UI is
+# on a separate domain (e.g. Vercel) and BACKEND_API_ENDPOINT is HTTPS.
+app.mount("/embed", StaticFiles(directory=str(APP_ROOT_DIR / "static" / "embed")), name="widget-embed")

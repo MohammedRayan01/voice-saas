@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from api.constants import BACKEND_API_ENDPOINT, ENVIRONMENT, UI_APP_URL
+from api.constants import BACKEND_API_ENDPOINT, ENVIRONMENT
 from api.db import db_client
 from api.db.models import EmbedTokenModel, UserModel
 from api.enums import PostHogEvent
@@ -18,7 +18,9 @@ router = APIRouter(prefix="/workflow")
 
 def generate_embed_script(token: EmbedTokenModel) -> str:
     """Generate the embed script for a given token."""
-    base_url = str(UI_APP_URL).rstrip("/")
+    # Widget JS is served from the API server (same HTTPS domain as BACKEND_API_ENDPOINT)
+    # so the script URL is always HTTPS and avoids mixed-content issues on HTTPS pages.
+    api_base = str(BACKEND_API_ENDPOINT).rstrip("/")
 
     return f"""<!-- Lynq Voice Widget -->
 <script>
@@ -26,7 +28,7 @@ def generate_embed_script(token: EmbedTokenModel) -> str:
     var js, fjs = d.getElementsByTagName(s)[0];
     if (d.getElementById(id)) return;
     js = d.createElement(s); js.id = id;
-    js.src = '{base_url}/embed/lynq-widget.js?token={token.token}&environment={ENVIRONMENT}&apiEndpoint={BACKEND_API_ENDPOINT}';
+    js.src = '{api_base}/embed/lynq-widget.js?token={token.token}&environment={ENVIRONMENT}&apiEndpoint={api_base}';
     js.async = true;
     fjs.parentNode.insertBefore(js, fjs);
   }}(document, 'script', 'lynq-widget'));
