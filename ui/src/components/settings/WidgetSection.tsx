@@ -11,43 +11,62 @@ import { useAuth } from "@/lib/auth";
 
 export function WidgetSection() {
   const { getAccessToken } = useAuth();
-  const [embedToken, setEmbedToken] = useState("");
   const [workflowId, setWorkflowId] = useState("");
   const [domains, setDomains] = useState("");
+  const [embedScript, setEmbedScript] = useState("");
   const [copied, setCopied] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState("");
 
   const handleGenerate = async () => {
-    if (!workflowId.trim()) return;
+    const id = parseInt(workflowId.trim(), 10);
+    if (!id || isNaN(id)) {
+      setError("Please enter a valid numeric workflow ID.");
+      return;
+    }
+    setError("");
     setGenerating(true);
     try {
       const token = await getAccessToken();
-      const res = await fetch("/api/v1/embed/token", {
+      const allowedDomains = domains
+        .split(",")
+        .map((d) => d.trim())
+        .filter(Boolean);
+
+      const res = await fetch(`/api/v1/workflow/${id}/embed-token`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
-          workflow_id: workflowId,
-          domain_whitelist: domains.split(",").map((d) => d.trim()).filter(Boolean),
+          allowed_domains: allowedDomains.length > 0 ? allowedDomains : null,
+          settings: { embedMode: "floating", position: "bottom-right" },
+          usage_limit: null,
+          expires_in_days: null,
         }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setEmbedToken(data.token ?? data.embed_token ?? "");
+
+      if (!res.ok) {
+        const detail = await res.text();
+        setError(`Failed to generate token (${res.status}). Check that the workflow ID exists.`);
+        console.error("Embed token error:", detail);
+        return;
       }
-    } catch {
-      // silent
+
+      const data = await res.json();
+      setEmbedScript(data.embed_script ?? "");
+    } catch (err) {
+      setError("Network error. Please try again.");
+      console.error(err);
     } finally {
       setGenerating(false);
     }
   };
 
-  const snippet = embedToken
-    ? `<script src="https://cdn.yourdomain.com/widget.js"></script>\n<script>\n  VoiceWidget.init({\n    token: '${embedToken}',\n    workflowId: '${workflowId}'\n  });\n</script>`
-    : "";
-
   const handleCopy = () => {
-    if (!snippet) return;
-    navigator.clipboard.writeText(snippet);
+    if (!embedScript) return;
+    navigator.clipboard.writeText(embedScript);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -63,9 +82,22 @@ export function WidgetSection() {
           <div>
             <p className="text-sm font-medium text-foreground">Embeddable Voice Widget</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Add a floating voice button to any website. Visitors can speak to your AI agent directly in the browser via WebRTC — no phone number needed.
+              Add a floating voice button to any website. Visitors can speak to your AI agent
+              directly in the browser via WebRTC — no phone number needed.
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Tip: use per-workflow configure */}
+      <Card className="border-amber-100 bg-amber-50/40">
+        <CardContent className="pt-4 pb-4">
+          <p className="text-xs text-amber-800">
+            <span className="font-semibold">Tip:</span> For full widget customisation (button
+            colour, embed mode, domain whitelist), open a specific workflow → Settings →{" "}
+            <span className="font-semibold">Add to Website</span> tab and click{" "}
+            <span className="font-semibold">Configure Widget</span>.
+          </p>
         </CardContent>
       </Card>
 
@@ -83,11 +115,14 @@ export function WidgetSection() {
             <Label htmlFor="wf-id">Workflow ID</Label>
             <Input
               id="wf-id"
-              placeholder="Enter your workflow ID"
+              placeholder="e.g. 42"
               value={workflowId}
               onChange={(e) => setWorkflowId(e.target.value)}
               className="mt-1.5"
             />
+            <p className="text-xs text-muted-foreground mt-1">
+              Found in the workflow URL: /workflow/<strong>42</strong>/settings
+            </p>
           </div>
           <div>
             <Label htmlFor="domains">Allowed Domains</Label>
@@ -98,26 +133,31 @@ export function WidgetSection() {
               onChange={(e) => setDomains(e.target.value)}
               className="mt-1.5"
             />
-            <p className="text-xs text-muted-foreground mt-1">Comma-separated. Leave empty to allow all origins.</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Comma-separated. Leave empty to allow all origins.
+            </p>
           </div>
+
+          {error && <p className="text-xs text-red-500">{error}</p>}
+
           <Button
             onClick={handleGenerate}
             disabled={generating || !workflowId.trim()}
             className="gradient-primary text-white"
           >
-            {generating ? "Generating…" : "Generate Token"}
+            {generating ? "Generating…" : "Generate Embed Script"}
           </Button>
         </CardContent>
       </Card>
 
       {/* Embed snippet */}
-      {snippet && (
+      {embedScript && (
         <Card className="border-border/60">
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base">
                 <Code className="h-4 w-4 text-primary" />
-                Embed Snippet
+                Embed Script
               </CardTitle>
               <Button variant="outline" size="sm" onClick={handleCopy}>
                 {copied ? (
@@ -137,8 +177,13 @@ export function WidgetSection() {
           </CardHeader>
           <CardContent>
             <pre className="rounded-xl bg-muted p-4 text-xs font-mono text-foreground overflow-x-auto whitespace-pre-wrap break-all">
-              {snippet}
+              {embedScript}
             </pre>
+            <p className="text-xs text-muted-foreground mt-3">
+              The script tag loads the real widget from your Lynq deployment. Token is embedded
+              in the URL — configuration changes in workflow settings apply automatically without
+              re-pasting this snippet.
+            </p>
           </CardContent>
         </Card>
       )}
