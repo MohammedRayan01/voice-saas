@@ -478,32 +478,64 @@ async def public_signaling_websocket(
     2. Retrieves the associated workflow run
     3. Handles WebRTC signaling without requiring authentication
     """
+    # Accept BEFORE any DB queries. Calling close() on a non-accepted WebSocket
+    # causes Starlette to send an HTTP rejection (non-101) instead of a proper
+    # WebSocket close frame, which browsers report as "WebSocket connection failed".
+    await websocket.accept()
 
-    # Validate session token
-    embed_session = await db_client.get_embed_session_by_token(session_token)
-    if not embed_session:
-        await websocket.close(code=1008, reason="Invalid session token")
+    try:
+        embed_session = await db_client.get_embed_session_by_token(session_token)
+        if not embed_session:
+            await websocket.close(code=1008, reason="Invalid session token")
+            return
+
+        if embed_session.expires_at and embed_session.expires_at < datetime.now(UTC):
+            await websocket.close(code=1008, reason="Session expired")
+            return
+
+        embed_token = await db_client.get_embed_token_by_id(embed_session.embed_token_id)
+        if not embed_token:
+            await websocket.close(code=1008, reason="Invalid embed token")
+            return
+
+        user = await db_client.get_user_by_id(embed_token.created_by)
+        if not user:
+            await websocket.close(code=1008, reason="Invalid user")
+            return
+    except Exception as e:
+        logger.error(f"Public embed WebSocket validation error: {e}")
+        await websocket.close(code=1011, reason="Internal server error")
         return
 
-    # Check if session is expired
-    if embed_session.expires_at and embed_session.expires_at < datetime.now(UTC):
-        await websocket.close(code=1008, reason="Session expired")
-        return
+    # Run the signaling loop directly (handle_websocket also calls accept(),
+    # so we bypass it to avoid a double-accept error).
+    workflow_id = embed_token.workflow_id
+    workflow_run_id = embed_session.workflow_run_id
+    connection_id = f"{workflow_id}:{workflow_run_id}:{user.id}"
+    signaling_manager._connections[connection_id] = websocket
 
-    # Get the embed token for user information
-    embed_token = await db_client.get_embed_token_by_id(embed_session.embed_token_id)
-    if not embed_token:
-        await websocket.close(code=1008, reason="Invalid embed token")
-        return
+    async def ws_sender(message: dict):
+        from starlette.websockets import WebSocketState
+        if websocket.application_state == WebSocketState.CONNECTED:
+            await websocket.send_json(message)
 
-    # Create a minimal user object for compatibility with signaling manager
-    # Use the embed token creator as the user
-    user = await db_client.get_user_by_id(embed_token.created_by)
-    if not user:
-        await websocket.close(code=1008, reason="Invalid user")
-        return
+    register_ws_sender(workflow_run_id, ws_sender)
 
-    # Handle the WebSocket connection using the existing signaling manager
-    await signaling_manager.handle_websocket(
-        websocket, embed_token.workflow_id, embed_session.workflow_run_id, user
-    )
+    try:
+        while True:
+            message = await websocket.receive_json()
+            await signaling_manager._handle_message(
+                websocket, message, workflow_id, workflow_run_id, user
+            )
+    except WebSocketDisconnect:
+        logger.info(f"Public embed WebSocket disconnected for {connection_id}")
+    except Exception as e:
+        logger.error(f"Public embed WebSocket error for {connection_id}: {e}")
+    finally:
+        signaling_manager._connections.pop(connection_id, None)
+        unregister_ws_sender(workflow_run_id)
+        for pc_id in list(signaling_manager._peer_connections.keys()):
+            pc = signaling_manager._peer_connections.pop(pc_id, None)
+            if pc:
+                await pc.disconnect()
+                logger.debug(f"Disconnected peer connection: {pc_id}")
