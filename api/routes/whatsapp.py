@@ -158,6 +158,7 @@ class ConversationResponse(BaseModel):
     last_message_at: Optional[datetime]
     unread_count: int
     updated_at: Optional[datetime]
+    created_at: Optional[datetime]
 
     class Config:
         from_attributes = True
@@ -201,6 +202,7 @@ async def list_conversations(
             last_message_at=conv.last_message_at,
             unread_count=conv.unread_count,
             updated_at=conv.updated_at,
+            created_at=conv.created_at,
         ))
     return result
 
@@ -242,6 +244,7 @@ async def get_messages(
             q = q.where(WaMessageModel.id < before_id)
         q = q.order_by(WaMessageModel.created_at.asc()).limit(limit)
         messages = (await s.execute(q)).scalars().all()
+        result = [MessageResponse.model_validate(m) for m in messages]
         # Mark as read
         await s.execute(
             update(WaConversationModel)
@@ -249,7 +252,7 @@ async def get_messages(
             .values(unread_count=0)
         )
         await s.commit()
-    return messages
+    return result
 
 
 class SendMessageBody(BaseModel):

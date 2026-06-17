@@ -76,8 +76,15 @@ function convTime(iso?: string): string {
     return format(d, 'dd/MM/yy');
 }
 
-function dateSeparator(iso: string): string {
+function safeDate(iso?: string | null): Date | null {
+    if (!iso) return null;
     const d = new Date(iso);
+    return isNaN(d.getTime()) ? null : d;
+}
+
+function dateSeparator(iso: string): string {
+    const d = safeDate(iso);
+    if (!d) return '';
     if (isToday(d)) return 'Today';
     if (isYesterday(d)) return 'Yesterday';
     return format(d, 'MMMM d, yyyy');
@@ -87,7 +94,8 @@ function groupByDate(msgs: Message[]): { label: string; items: Message[] }[] {
     const groups: { label: string; items: Message[] }[] = [];
     let cur = '';
     for (const m of msgs) {
-        const day = format(new Date(m.created_at), 'yyyy-MM-dd');
+        const d = safeDate(m.created_at);
+        const day = d ? format(d, 'yyyy-MM-dd') : 'unknown';
         if (day !== cur) { cur = day; groups.push({ label: dateSeparator(m.created_at), items: [] }); }
         groups[groups.length - 1].items.push(m);
     }
@@ -355,7 +363,7 @@ export default function InboxPage() {
                                                     out ? 'bg-violet-600 text-white rounded-br-sm' : 'bg-slate-800 text-slate-100 rounded-bl-sm')}>
                                                     <p className="whitespace-pre-wrap break-words">{msg.content_text || '—'}</p>
                                                     <div className={cn('flex items-center gap-1 mt-1', out ? 'justify-end' : 'justify-start')}>
-                                                        <span className="text-[10px] opacity-60">{format(new Date(msg.created_at), 'HH:mm')}</span>
+                                                        <span className="text-[10px] opacity-60">{safeDate(msg.created_at) ? format(safeDate(msg.created_at)!, 'HH:mm') : ''}</span>
                                                         {out && <span className="opacity-60">
                                                             {msg.status === 'read' ? <CheckCheck className="h-3 w-3 text-blue-300" />
                                                                 : msg.status === 'delivered' ? <CheckCheck className="h-3 w-3" />
@@ -418,7 +426,7 @@ export default function InboxPage() {
                         )}
                         <div className="flex items-center gap-2 text-xs text-slate-500">
                             <Clock className="h-3.5 w-3.5" />
-                            {formatDistanceToNow(new Date(active.created_at), { addSuffix: true })}
+                            {safeDate(active.created_at) ? formatDistanceToNow(safeDate(active.created_at)!, { addSuffix: true }) : ''}
                         </div>
                     </div>
                 </div>
