@@ -573,16 +573,22 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
         # Gemini Live enables input/output audio transcription by default
         # in its _connect() method — no need to configure it explicitly.
         #
-        # VAD tuning: 700ms silence gives natural thinking pauses before
-        # the model responds. LOW end-sensitivity avoids cutting callers
-        # off mid-breath, which is the main cause of the "robotic" feel.
+        # VAD tuning:
+        # - silence_duration_ms=400: down from 700ms — Gemini responds 300ms
+        #   faster after the user finishes speaking; still avoids cutting off
+        #   natural mid-sentence pauses.
+        # - END_SENSITIVITY_HIGH: Gemini commits to user turn-end sooner,
+        #   making interruptions feel snappier (bot stops speaking faster when
+        #   user interjects). LOW was causing slow interruption handoffs.
+        # - START_SENSITIVITY_HIGH: kept — quickly detects when user starts
+        #   speaking, which is required for interruptions to fire at all.
         settings_kwargs = {
             "model": model,
             "voice": voice or "Aoede",  # Aoede rated most natural by community
             "temperature": 0.7,         # Adds natural variation without instability
             "vad": GeminiVADParams(
-                silence_duration_ms=700,
-                end_sensitivity=EndSensitivity.END_SENSITIVITY_LOW,
+                silence_duration_ms=400,
+                end_sensitivity=EndSensitivity.END_SENSITIVITY_HIGH,
                 start_sensitivity=StartSensitivity.START_SENSITIVITY_HIGH,
             ),
         }

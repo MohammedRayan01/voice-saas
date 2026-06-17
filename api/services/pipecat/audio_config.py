@@ -100,7 +100,15 @@ def create_audio_config(transport_type: str) -> AudioConfig:
         WorkflowRunMode.WEBRTC.value,
         WorkflowRunMode.SMALLWEBRTC.value,
     ):
-        rate = 16000
+        # Output at 24 kHz — Gemini Live's native rate. aiortc then upsamples
+        # 24k→48k (2x clean), not 16k→48k (3x lossy). Cuts choppiness artifacts.
+        # Input stays at 16 kHz; VAD is capped at 16 kHz.
+        return AudioConfig(
+            transport_in_sample_rate=16000,
+            transport_out_sample_rate=24000,
+            vad_sample_rate=16000,
+            pipeline_sample_rate=16000,
+        )
     else:
         logger.warning(
             f"Unknown transport type: {transport_type}, using default config"

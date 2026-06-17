@@ -629,9 +629,21 @@
         state.workflowRunId = state.config.runId;
       }
 
-      // Request microphone permission
+      // Request microphone permission with explicit constraints.
+      // echoCancellation: removes AI audio echo from the mic signal so
+      //   Gemini doesn't mistake its own voice for user speech (interruptions).
+      // noiseSuppression: reduces background noise for cleaner VAD detection.
+      // autoGainControl: keep false — AGC can cause volume pumping that
+      //   confuses Gemini's VAD and makes it think the user is always speaking.
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: false,
+            sampleRate: 16000,
+          }
+        });
         state.stream = stream;
       } catch (micError) {
         // Handle specific microphone permission errors
