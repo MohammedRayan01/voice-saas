@@ -14,6 +14,7 @@ from api.services.pipecat.in_memory_buffers import (
 )
 from api.services.pipecat.pipeline_metrics_aggregator import PipelineMetricsAggregator
 from api.services.pipecat.tracing_config import get_trace_url
+from api.services.pipecat.ws_sender_registry import get_ws_sender
 from api.services.posthog_client import capture_event
 from api.services.workflow.pipecat_engine import PipecatEngine
 from api.tasks.arq import enqueue_job
@@ -269,6 +270,15 @@ def register_event_handlers(
         _frame: Frame,
     ):
         logger.debug(f"In on_pipeline_finished callback handler")
+
+        # Notify the embed widget (if present) so it can end the call immediately
+        # without waiting for the ICE connection to time out on its own.
+        try:
+            pipeline_ws_sender = get_ws_sender(workflow_run_id)
+            if pipeline_ws_sender:
+                await pipeline_ws_sender({"type": "call-ended", "reason": "pipeline_finished"})
+        except Exception as e:
+            logger.debug(f"Failed to send call-ended WS message: {e}")
 
         workflow_run = await db_client.get_workflow_run_by_id(workflow_run_id)
 

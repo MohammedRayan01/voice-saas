@@ -31,6 +31,7 @@
     turnCredentials: null, // TURN server credentials
     callStartedAt: null, // Timestamp when call connected (for duration tracking)
     _pingInterval: null, // setInterval handle for data channel keepalives
+    _idleTimeout: null,  // setTimeout handle for idle auto-end
     callbacks: {
       onReady: null,
       onCallStart: null,
@@ -791,6 +792,11 @@
           console.warn('Lynq Widget: audio play() failed:', err);
         });
         console.log('Lynq audio attached');
+
+        // Reset idle timeout whenever audio is actively playing.
+        state.audioElement.addEventListener('timeupdate', () => {
+          if (state.connectionStatus === 'connected') resetIdleTimeout();
+        });
       }
     };
 
@@ -811,6 +817,9 @@
               workflowRunId: state.workflowRunId || null
             });
           }
+          // Start idle timeout — auto-end if no audio activity for 90 seconds.
+          // The server will usually send call-ended first; this is a fallback.
+          resetIdleTimeout();
         }
         // Re-trigger play() now that ICE is up and audio data can flow.
         // ontrack may have called play() while ICE was still in 'checking',
@@ -818,13 +827,24 @@
         if (state.audioElement && state.audioElement.srcObject) {
           state.audioElement.play().catch(() => {});
         }
-      } else if (state.pc.iceConnectionState === 'failed') {
-        // 'failed' is unrecoverable — end the call
+      } else if (state.pc.iceConnectionState === 'failed' || state.pc.iceConnectionState === 'closed') {
+        // 'failed' is unrecoverable. 'closed' means the remote peer shut down the session.
         updateStatus('failed', 'Connection lost', 'The call has been disconnected');
         stopCall();
       }
       // 'disconnected' is transient; ICE will attempt to reconnect automatically.
       // Do NOT call stopCall() here — the browser recovers to 'connected' or 'failed'.
+    };
+
+    // Also watch the overall connection state — catches 'closed' from remote hangup
+    // even when ICE doesn't go through 'failed' first.
+    state.pc.onconnectionstatechange = () => {
+      if (!state.pc) return;
+      const cs = state.pc.connectionState;
+      if ((cs === 'failed' || cs === 'closed') && state.connectionStatus === 'connected') {
+        console.log('RTCPeerConnection state:', cs, '— ending call');
+        stopCall();
+      }
     };
 
     // Handle ICE candidates for trickling
@@ -916,13 +936,20 @@
         }
         break;
 
+      case 'call-ended':
+        // Server pipeline finished (workflow reached endCall node, idle timeout, etc.)
+        console.log('Server ended call:', message.reason || 'pipeline_finished');
+        stopCall();
+        break;
+
       case 'error':
         console.error('Server error:', message.payload);
         updateStatus('failed', 'Server error', message.payload.message || 'An error occurred');
         break;
 
       default:
-        console.warn('Unknown message type:', message.type);
+        // Silently ignore unknown real-time feedback messages (latency, node transitions, etc.)
+        break;
     }
   }
 
@@ -947,6 +974,21 @@
 
     state.ws.send(JSON.stringify(message));
     console.log('Sent offer via WebSocket');
+  }
+
+  /**
+   * Reset (or start) the 90-second idle timeout.
+   * Called when the call first connects and whenever audio activity is detected.
+   */
+  function resetIdleTimeout() {
+    if (state._idleTimeout) clearTimeout(state._idleTimeout);
+    // 90 seconds of silence → auto-end. Server usually sends call-ended first.
+    state._idleTimeout = setTimeout(() => {
+      if (state.connectionStatus === 'connected') {
+        console.log('Lynq Widget: idle timeout — ending call automatically');
+        stopCall();
+      }
+    }, 90000);
   }
 
   /**
@@ -976,6 +1018,12 @@
     if (state._pingInterval) {
       clearInterval(state._pingInterval);
       state._pingInterval = null;
+    }
+
+    // Clear idle timeout
+    if (state._idleTimeout) {
+      clearTimeout(state._idleTimeout);
+      state._idleTimeout = null;
     }
 
     // Close WebSocket
