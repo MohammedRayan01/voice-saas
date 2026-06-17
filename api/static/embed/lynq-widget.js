@@ -30,6 +30,7 @@
     audioElement: null,
     turnCredentials: null, // TURN server credentials
     callStartedAt: null, // Timestamp when call connected (for duration tracking)
+    _pingInterval: null, // setInterval handle for data channel keepalives
     callbacks: {
       onReady: null,
       onCallStart: null,
@@ -751,6 +752,27 @@
 
     state.pc = new RTCPeerConnection(config);
 
+    // Create a data channel so Pipecat's keepalive mechanism works.
+    // Without this, the server logs "Data channel not established within 10s"
+    // and its is_connected() check falls back to connectionState only.
+    // With this, ping messages keep _last_received_time fresh.
+    const dataChannel = state.pc.createDataChannel('pipecat-audio');
+    dataChannel.onopen = () => {
+      console.log('Pipecat data channel open');
+      // Send periodic pings so the server knows the connection is alive
+      state._pingInterval = setInterval(() => {
+        if (dataChannel.readyState === 'open') {
+          dataChannel.send('ping');
+        }
+      }, 5000);
+    };
+    dataChannel.onclose = () => {
+      if (state._pingInterval) {
+        clearInterval(state._pingInterval);
+        state._pingInterval = null;
+      }
+    };
+
     // Add audio track
     if (state.stream) {
       state.stream.getTracks().forEach(track => {
@@ -762,11 +784,19 @@
     state.pc.ontrack = (event) => {
       if (event.track.kind === 'audio' && state.audioElement) {
         state.audioElement.srcObject = event.streams[0];
+        // Explicitly call play() — setting srcObject alone may not trigger
+        // autoplay in all browsers when the audio element was created before
+        // the user gesture that started the call.
+        state.audioElement.play().catch(err => {
+          console.warn('Lynq Widget: audio play() failed:', err);
+        });
+        console.log('Lynq audio attached');
       }
     };
 
     // Monitor connection state
     state.pc.oniceconnectionstatechange = () => {
+      if (!state.pc) return;
       console.log('ICE connection state:', state.pc.iceConnectionState);
 
       if (state.pc.iceConnectionState === 'connected' || state.pc.iceConnectionState === 'completed') {
@@ -782,10 +812,13 @@
             });
           }
         }
-      } else if (state.pc.iceConnectionState === 'failed' || state.pc.iceConnectionState === 'disconnected') {
+      } else if (state.pc.iceConnectionState === 'failed') {
+        // 'failed' is unrecoverable — end the call
         updateStatus('failed', 'Connection lost', 'The call has been disconnected');
         stopCall();
       }
+      // 'disconnected' is transient; ICE will attempt to reconnect automatically.
+      // Do NOT call stopCall() here — the browser recovers to 'connected' or 'failed'.
     };
 
     // Handle ICE candidates for trickling
@@ -931,6 +964,12 @@
 
     if (state.callbacks.onCallEnd) {
       state.callbacks.onCallEnd();
+    }
+
+    // Clear data channel ping interval
+    if (state._pingInterval) {
+      clearInterval(state._pingInterval);
+      state._pingInterval = null;
     }
 
     // Close WebSocket
