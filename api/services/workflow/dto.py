@@ -948,11 +948,6 @@ class EndCallRFNode(_RFNodeBase):
     type: Literal["endCall"] = "endCall"
     data: EndCallNodeData
 
-    @model_validator(mode="after")
-    def _validate(self):
-        _require_prompt(self.data, "end")
-        return self
-
 
 class GlobalRFNode(_RFNodeBase):
     type: Literal["globalNode"] = "globalNode"
