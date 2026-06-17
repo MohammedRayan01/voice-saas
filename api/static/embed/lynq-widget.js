@@ -812,6 +812,12 @@
             });
           }
         }
+        // Re-trigger play() now that ICE is up and audio data can flow.
+        // ontrack may have called play() while ICE was still in 'checking',
+        // before any RTP packets could arrive, causing some browsers to stall.
+        if (state.audioElement && state.audioElement.srcObject) {
+          state.audioElement.play().catch(() => {});
+        }
       } else if (state.pc.iceConnectionState === 'failed') {
         // 'failed' is unrecoverable — end the call
         updateStatus('failed', 'Connection lost', 'The call has been disconnected');
