@@ -1586,3 +1586,48 @@ class ScheduledAutomationRunModel(Base):
         Index("ix_scheduled_automation_runs_org_status", "organization_id", "status"),
         Index("ix_scheduled_automation_runs_run_at", "run_at"),
     )
+
+
+class OrgDataTableModel(Base):
+    """User-defined data tables (like Airtable) that the AI can query mid-conversation.
+
+    Each org creates tables (rooms, products, properties, job openings, etc.).
+    Rows are stored in OrgDataRowModel as JSON. The workflow engine queries these
+    tables via the 'get_table_row' and 'update_table_row' automation step types.
+    """
+    __tablename__ = "org_data_tables"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    # Schema definition: list of {name, type, required} column descriptors
+    schema_json = Column(JSON, nullable=False, default=list)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+    rows = relationship("OrgDataRowModel", back_populates="table", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("organization_id", "name", name="uq_org_data_tables_org_name"),
+        Index("ix_org_data_tables_org_id", "organization_id"),
+    )
+
+
+class OrgDataRowModel(Base):
+    """A single row in an OrgDataTableModel. Data stored as flexible JSON."""
+    __tablename__ = "org_data_rows"
+
+    id = Column(Integer, primary_key=True, index=True)
+    table_id = Column(Integer, ForeignKey("org_data_tables.id", ondelete="CASCADE"), nullable=False, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    data = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+    table = relationship("OrgDataTableModel", back_populates="rows")
+
+    __table_args__ = (
+        Index("ix_org_data_rows_table_id", "table_id"),
+        Index("ix_org_data_rows_org_id", "organization_id"),
+    )

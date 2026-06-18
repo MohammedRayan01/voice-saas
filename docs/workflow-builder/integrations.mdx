@@ -1,0 +1,258 @@
+---
+title: "Integrations"
+description: "Connect Lynq to your existing CRM, calendar, e-commerce store, and other tools"
+---
+
+## Overview
+
+Lynq connects to the tools you're already using — you don't need to move your data or change your processes. Integrations let your workflows read from and write to external systems mid-conversation.
+
+---
+
+## Google Calendar
+
+The most commonly used integration. Your AI can check availability, book appointments, cancel bookings, and send calendar invites — all during a live conversation.
+
+### Setup
+
+1. Go to **Settings → Integrations → Google Calendar**
+2. Click **Connect Google Account**
+3. Sign in with the Google account that owns the calendar
+4. Select which calendar to use (if you have multiple)
+5. Click **Allow**
+
+### What your AI can do
+
+| Action | What happens |
+|---|---|
+| Check availability | Queries your calendar for free slots on a given date |
+| Book appointment | Creates a calendar event and sends an invite to the customer |
+| Cancel appointment | Removes the event and notifies the customer |
+| List upcoming appointments | Used to give existing customers their appointment details |
+
+### Using calendar in a workflow
+
+Use the **Check Calendar** and **Create Appointment** blocks from the Data section of your workflow.
+
+The **Check Calendar** block returns available time slots. The AI presents these to the customer and collects their preference. The **Create Appointment** block then creates the event.
+
+---
+
+## HubSpot
+
+Sync contacts and deals between Lynq and HubSpot automatically.
+
+### Setup
+
+1. Go to **Settings → Integrations → HubSpot**
+2. Click **Connect HubSpot**
+3. Sign in and authorise Lynq
+4. Map your Lynq pipeline stages to HubSpot deal stages
+
+### What syncs
+
+| Lynq action | HubSpot update |
+|---|---|
+| New contact created in Lynq | Contact created in HubSpot |
+| Contact field updated | HubSpot contact property updated |
+| Deal created | HubSpot deal created in mapped pipeline |
+| Deal moved to a stage | HubSpot deal stage updated |
+| Conversation note added | HubSpot activity logged |
+
+### Using HubSpot in a workflow
+
+Use the **HubSpot** integration block. Configure it to:
+- **Create/update contact** — push customer data from the AI conversation into HubSpot
+- **Create deal** — open a deal at a specific stage
+- **Add note** — log the conversation summary to the HubSpot contact timeline
+
+---
+
+## Zoho CRM
+
+Same capabilities as HubSpot — contact sync, deal creation, activity logging.
+
+### Setup
+
+1. Go to **Settings → Integrations → Zoho CRM**
+2. Click **Connect Zoho**
+3. Authorise with your Zoho credentials
+4. Map your modules (Leads, Contacts, Deals) to Lynq's data
+
+---
+
+## Salesforce
+
+Enterprise CRM integration. Supports contacts, opportunities, activities, and custom objects.
+
+### Setup
+
+1. Go to **Settings → Integrations → Salesforce**
+2. Click **Connect Salesforce**
+3. Enter your Salesforce instance URL (e.g. `mycompany.salesforce.com`)
+4. Authorise via OAuth
+5. Configure which objects to sync
+
+<Info>
+Salesforce integration requires a Professional, Enterprise, or Unlimited edition Salesforce account (API access must be enabled).
+</Info>
+
+---
+
+## Airtable
+
+Use Airtable as a data source for your workflows. Great if you're already managing your inventory or listings in Airtable and don't want to migrate to Lynq's Data Tables.
+
+### Setup
+
+1. Go to **Settings → Integrations → Airtable**
+2. Enter your Airtable API key (found in Airtable account settings)
+3. Select the base and table you want to connect
+
+### Using Airtable in a workflow
+
+Use the **Airtable** integration block. Configure it to read rows from your Airtable base using filters. The AI receives the matching rows and can use them in its response.
+
+---
+
+## Google Sheets
+
+Read data from a Google Sheet during a conversation. Useful for product catalogs, pricing tables, or any data your team already manages in Sheets.
+
+### Setup
+
+1. Go to **Settings → Integrations → Google Sheets**
+2. Connect the Google account that owns the sheet
+3. Select the spreadsheet and the specific sheet tab
+
+### Using Sheets in a workflow
+
+The **Google Sheets** block queries your sheet with a filter (e.g. "find the row where column A = {{collected.product_name}}") and returns matching data to the AI.
+
+---
+
+## Razorpay
+
+Send payment links and verify payment status within WhatsApp conversations.
+
+### Setup
+
+1. Go to **Settings → Integrations → Razorpay**
+2. Enter your Razorpay API Key ID and API Key Secret (from your Razorpay dashboard)
+3. Click **Save & Test**
+
+### What your AI can do
+
+| Action | How it works |
+|---|---|
+| Send payment link | AI creates a Razorpay payment link for the specified amount and sends it via WhatsApp |
+| Check payment status | AI queries Razorpay for the status of a specific payment link |
+| Confirm payment | Triggers the next workflow step automatically when payment is completed |
+
+### Example workflow
+
+```
+Booking confirmed
+    → Create Appointment
+    → Razorpay: Generate payment link for ₹{{booking.total_amount}}
+    → Send WhatsApp: "Your booking is confirmed! Please complete payment: {{payment.link}}"
+    → Wait for payment webhook
+    → Send WhatsApp: "Payment received! See you on {{booking.checkin_date}}."
+```
+
+---
+
+## Shopify
+
+Pull order and product data from your Shopify store into AI conversations.
+
+### Setup
+
+1. Go to **Settings → Integrations → Shopify**
+2. Enter your Shopify store URL (e.g. `mystore.myshopify.com`)
+3. Generate a private app API key in Shopify with `read_orders` and `read_products` permissions
+4. Enter the API key in Lynq
+
+### What your AI can access
+
+| Data | What it enables |
+|---|---|
+| Order details | Customer asks "where is my order?" — AI looks up by order ID or phone number |
+| Order status | Fulfillment status, tracking URL, estimated delivery |
+| Product details | Descriptions, prices, availability, variants |
+| Customer history | Previous orders for returning customers |
+
+---
+
+## HTTP Request (any API)
+
+Don't see your tool listed? The **HTTP Request** block connects to any service that has a REST API — which includes almost every modern tool (Notion, Freshdesk, Calendly, Pipedrive, custom databases, etc.).
+
+### When to use it
+
+- Your CRM isn't on the named integrations list
+- You have a custom internal system
+- You need to look up data from your own database
+- You want to trigger a webhook in another tool
+
+### How to configure it
+
+In the HTTP Request block:
+
+| Field | What to enter |
+|---|---|
+| **URL** | The API endpoint (e.g. `https://api.yourcrm.com/v1/leads`) |
+| **Method** | GET (read data) or POST (create/update data) |
+| **Headers** | Authorization: Bearer {{your_api_key}} |
+| **Body** | JSON payload — use `{{variables}}` to insert data from the conversation |
+| **Save response as** | A variable name to use later in the workflow |
+
+### Example: look up customer in a custom CRM
+
+```
+URL: https://api.mycrm.com/v1/customers/lookup
+Method: POST
+Headers: 
+  Authorization: Bearer your-api-key
+  Content-Type: application/json
+Body:
+  {
+    "phone": "{{contact.phone}}"
+  }
+Save response as: customer_data
+```
+
+After this block runs, `{{customer_data.name}}`, `{{customer_data.account_type}}`, etc. are available in subsequent blocks.
+
+---
+
+## WhatsApp Business API
+
+Lynq manages your WhatsApp connection for you. When you connect a WhatsApp number in settings, Lynq handles:
+
+- Receiving inbound messages via webhook
+- Sending messages (text, images, documents)
+- Sending pre-approved template messages (for marketing and notifications)
+- Delivery and read receipts
+
+You don't need to manage the Meta Cloud API directly.
+
+### Connecting your WhatsApp number
+
+1. Go to **WhatsApp → Settings → Connection**
+2. Follow the Meta verification flow
+3. Once verified, your number is active and workflows can trigger on inbound messages
+
+---
+
+## Telephony
+
+For voice AI calls, Lynq connects to telephony providers that handle call routing. See [Telephony Setup](/integrations/telephony/overview) for provider-specific instructions.
+
+---
+
+## Testing integrations
+
+After setting up any integration, use the **Test** button in the integration settings to verify the connection. A successful test means Lynq can read from and write to that system.
+
+Before going live with a workflow, send yourself a test conversation that exercises the integration — verify that data actually appears in the external system.

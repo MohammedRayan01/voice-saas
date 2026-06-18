@@ -21,6 +21,7 @@ import {
   MessageSquare,
   Phone,
   Settings,
+  Table2,
   TrendingUp,
   Users,
   Workflow,
@@ -124,6 +125,11 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         title: "Files",
         url: "/files",
         icon: Database,
+      },
+      {
+        title: "Data Tables",
+        url: "/data-tables",
+        icon: Table2,
       },
       {
         title: "Contacts",

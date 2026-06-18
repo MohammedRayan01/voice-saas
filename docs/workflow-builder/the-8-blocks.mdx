@@ -1,0 +1,181 @@
+---
+title: "The 8 Block Types"
+description: "Every Lynq workflow is built from these 8 types of blocks. Learn what each one does."
+---
+
+Every automation you build in Lynq — no matter how complex — is made from the same 8 types of blocks. Once you understand these, you can build any workflow.
+
+Think of each block like a role in your team:
+
+> **Trigger** starts the shift → **AI** has the conversation → **Logic** makes decisions → **Data** looks things up → **Channel** sends messages → **Integration** updates your tools → **Notification** alerts your team → **Utility** does the housekeeping
+
+---
+
+## 1. Trigger Blocks — "What starts it"
+
+<Icon icon="play" iconType="solid" color="#16A34A" /> A trigger block is always the first block in every workflow. It listens for an event and fires the workflow when that event happens.
+
+| Block | When it fires |
+|---|---|
+| **Inbound WhatsApp** | A customer sends your WhatsApp number a message |
+| **Inbound Call** | Someone calls your phone number |
+| **Inbound Email** | An email arrives in your connected inbox |
+| **Missed Call** | A call came in but wasn't answered |
+| **Keyword Match** | A message contains a specific word or phrase ("book", "price", "cancel") |
+| **Form Submitted** | Someone fills out a contact form on your website |
+| **Scheduled** | Run automatically at a set time — every day at 9am, or 7 days after an event |
+| **API / Webhook** | An external system tells Lynq something happened (Shopify order placed, CRM deal moved) |
+
+<Tip>
+You can have multiple triggers pointing to the same workflow. For example, both "Inbound WhatsApp" and "Inbound Call" can both start your booking workflow — the AI will handle each channel appropriately.
+</Tip>
+
+---
+
+## 2. Channel Blocks — "How you talk to them"
+
+<Icon icon="comment" iconType="solid" color="#2563EB" /> Channel blocks send a message or initiate a call. They're how Lynq reaches back out to the customer.
+
+| Block | What it does |
+|---|---|
+| **Send WhatsApp** | Send a text, image, document, or pre-approved template message via WhatsApp |
+| **Start Voice Call** | Place an outbound AI call to the customer's phone number |
+| **Send Email** | Compose and send a personalized email |
+| **Send SMS** | Send a short text message |
+| **Handoff to Human** | Route the conversation to a live agent in your Lynq inbox |
+
+<Note>
+The **Handoff to Human** block doesn't just transfer the chat — it passes the full conversation history to your agent so they never have to ask "so what were you looking for again?"
+</Note>
+
+---
+
+## 3. AI Blocks — "The brain"
+
+<Icon icon="brain" iconType="solid" color="#7C3AED" /> AI blocks are where the intelligence lives. They read what the customer said and decide what to do next.
+
+| Block | What it does |
+|---|---|
+| **AI Conversation** | A multi-turn dialog with the customer. You set the goal ("collect name, budget, and preferred dates") and the AI figures out how to get there naturally |
+| **Intent Classifier** | Reads the customer's first message and labels it: BOOKING, FAQ, COMPLAINT, UNCLEAR, etc. Routes to the right path automatically |
+| **Data Extractor** | Pulls structured information from what the customer said — name, budget, preferred dates, property type |
+| **Lead Scorer** | Scores how likely this lead is to convert based on what they told you (BANT scoring: Budget, Authority, Need, Timeline) |
+| **Sentiment Analyzer** | Detects if the customer is happy, frustrated, or angry — and changes routing accordingly |
+| **Content Generator** | Takes a template and fills it with customer-specific data to write a personalized message |
+
+<Tip>
+The **AI Conversation** block is the workhorse of most workflows. Give it a clear goal and let it handle the back-and-forth naturally. It knows when to stop collecting info and hand off to the next block.
+</Tip>
+
+---
+
+## 4. Logic Blocks — "Traffic signals"
+
+<Icon icon="code-branch" iconType="solid" color="#D97706" /> Logic blocks control the flow. They don't send messages or talk to customers — they just decide which path to take next.
+
+| Block | What it does |
+|---|---|
+| **Branch (If/Else)** | Check a condition and go one of two ways. "If lead score > 70, go to the fast-track path. Otherwise, go to the drip sequence." |
+| **Wait / Delay** | Pause the workflow for a set time before continuing. "Wait 24 hours, then send the follow-up." |
+| **A/B Split** | Send half your leads down path A and half down path B — useful for testing message variations |
+| **Loop** | For each item in a list, repeat a set of steps. "For each product in the cart, send a line-item confirmation." |
+| **Stop** | End the workflow for this customer without sending anything |
+
+<Info>
+**Wait / Delay** blocks are how you build drip sequences. Day 1 message → wait 2 days → Day 3 follow-up → wait 4 more days → Day 7 close. The workflow runs automatically on schedule.
+</Info>
+
+---
+
+## 5. Data Blocks — "Memory and records"
+
+<Icon icon="database" iconType="solid" color="#EA580C" /> Data blocks read from and write to your business data. This is how your AI knows about your products, customers, and bookings.
+
+| Block | What it does |
+|---|---|
+| **Get / Update Contact** | Look up a customer by phone or email, or save new information about them |
+| **Create / Move Deal** | Open a new deal in your pipeline, or advance it to a new stage |
+| **Get Table Row** | Query a [Data Table](/workflow-builder/data-tables) — look up room availability, a product, a property listing |
+| **Update Table Row** | Write back to a Data Table — mark a room as booked, update stock levels |
+| **Search Knowledge Base** | Semantic search through your uploaded FAQs and documents |
+| **Check Calendar** | Find available time slots on your Google Calendar |
+| **Create Appointment** | Book a specific slot — creates the event and sends a calendar invite |
+| **Create Ticket** | Open a support ticket or escalation record |
+
+---
+
+## 6. Integration Blocks — "Connectors to existing tools"
+
+<Icon icon="plug" iconType="solid" color="#0891B2" /> Integration blocks connect Lynq to software you're already using. You don't have to migrate your data — Lynq works with your existing tools.
+
+| Block | Connects to |
+|---|---|
+| **HTTP Request** | Any API — if it has a URL, you can connect to it |
+| **HubSpot** | Sync contacts, update deals, log activities |
+| **Zoho CRM** | Push leads, update pipeline stages |
+| **Salesforce** | Enterprise CRM sync |
+| **Airtable** | Read and write Airtable bases as a data source |
+| **Google Sheets** | Read your product inventory or write order confirmations |
+| **Razorpay / Stripe** | Send payment links, verify payment status |
+| **Shopify / WooCommerce** | Look up orders, inventory, customer history |
+
+<Tip>
+Don't see your tool listed? Use the **HTTP Request** block — it can connect to any system that has a REST API. Most modern tools (Notion, Freshdesk, Calendly, etc.) have one.
+</Tip>
+
+---
+
+## 7. Notification Blocks — "Alert a human"
+
+<Icon icon="bell" iconType="solid" color="#DC2626" /> Notification blocks tell your team something happened. They don't replace the AI — they make sure the right person gets looped in at the right moment.
+
+| Block | What it does |
+|---|---|
+| **Alert Team** | Send a WhatsApp or email to a team member (e.g. "New HOT lead from Mumbai: Rahul wants a 3BHK in Bandra, budget ₹5 Cr") |
+| **Assign to Agent** | Route the live conversation to a specific person in your Lynq inbox |
+| **Create Task** | Add a to-do item for a team member (e.g. "Call back Priya — she asked about pricing and went quiet") |
+
+---
+
+## 8. Utility Blocks — "Plumbing"
+
+<Icon icon="wrench" iconType="solid" color="#6B7280" /> Utility blocks are behind-the-scenes helpers that keep everything organized.
+
+| Block | What it does |
+|---|---|
+| **Set Variable** | Store a value for use later in the workflow — e.g. save the lead score to `{{lead_score}}` so you can reference it in a Branch block |
+| **Format Data** | Convert formats: turn a date into "Mon 12 May", combine first + last name, map a value from one label to another |
+| **Note** | A sticky note on the canvas — describes what a section does, visible only to you, never executed |
+
+---
+
+## Putting it all together
+
+A typical booking workflow uses blocks from 5-6 categories:
+
+```
+Inbound WhatsApp (Trigger)
+    → AI Conversation (AI) — "Hi! Are you looking to book a room?"
+    → Data Extractor (AI) — pulls: room type, dates, guest count
+    → Get Table Row (Data) — checks room availability in your Rooms table
+    → Branch (Logic) — available? Yes → Continue. No → Show alternatives.
+    → Send WhatsApp (Channel) — "Great! The Sea Villa is available. Here are the details..."
+    → Create Appointment (Data) — books the slot on your calendar
+    → Create Deal (Data) — opens a deal in your pipeline at "Booking Confirmed"
+    → Alert Team (Notification) — "New booking: Sea Villa, 15-17 July, ₹18,000/night"
+```
+
+That's 8 blocks to fully automate a booking, from first message to confirmed deal in your CRM — running 24/7 without any human involvement.
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Build Your First Workflow" icon="play" href="/workflow-builder/your-first-workflow">
+    Step-by-step walkthrough using these blocks
+  </Card>
+  <Card title="Data Tables" icon="table" href="/workflow-builder/data-tables">
+    How to store your rooms, products, and listings so the AI can look them up
+  </Card>
+</CardGroup>

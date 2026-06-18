@@ -1,0 +1,262 @@
+---
+title: "Industry Packs"
+description: "Install a complete, pre-built workflow for your industry in one click — no building required"
+---
+
+## What is an Industry Pack?
+
+An Industry Pack is a ready-made bundle of everything you need to run AI automation for a specific type of business — pre-configured automations, a pipeline with the right stages, an AI brain trained on your industry's terminology, and a setup wizard that personalises it to your business in 5 minutes.
+
+Instead of building blocks from scratch, you answer a few questions about your business and Lynq installs everything automatically.
+
+---
+
+## Available packs
+
+<CardGroup cols={2}>
+  <Card title="Hospitality" icon="hotel" href="#hospitality-pack">
+    Hotels, resorts, homestays, boutique properties
+  </Card>
+  <Card title="Real Estate" icon="house" href="#real-estate-pack">
+    Brokers, developers, property management
+  </Card>
+  <Card title="Healthcare" icon="heart-pulse" href="#healthcare-pack">
+    Clinics, hospitals, diagnostic centres, wellness
+  </Card>
+  <Card title="Education" icon="graduation-cap" href="#education-pack">
+    Coaching centres, ed-tech, training institutes
+  </Card>
+  <Card title="Law Firm" icon="scale-balanced" href="#law-firm-pack">
+    Lawyers, legal consultancies, advisory firms
+  </Card>
+  <Card title="HR & Recruitment" icon="users" href="#hr-pack">
+    Staffing agencies, in-house HR, talent acquisition
+  </Card>
+</CardGroup>
+
+---
+
+## How to install a pack
+
+1. Go to **WhatsApp → Settings → Industry Packs**
+2. Browse the available packs and click **Install** on the one that matches your business
+3. Complete the 5-step setup wizard (takes about 5 minutes)
+4. Click **Install Pack** — Lynq creates everything automatically
+5. Your AI is live and ready to handle customer conversations
+
+### What gets created on install
+
+| Created automatically | You provide in the wizard |
+|---|---|
+| 10–15 pre-built automations | Your business name and location |
+| Pipeline with industry-specific stages | Your room/service/product types |
+| AI system prompt trained on your industry | Your business hours and timezone |
+| Knowledge base template with FAQs | After-hours message |
+| Welcome and confirmation message templates | Escalation contact (your phone/email) |
+
+---
+
+## Hospitality Pack {#hospitality-pack}
+
+**For:** Hotels, beach resorts, hill resorts, heritage properties, homestays, boutique properties
+
+### What the AI handles
+
+The AI classifies every incoming message into one of these intents and routes accordingly:
+
+| Intent | AI behaviour |
+|---|---|
+| **Room inquiry** | Collects dates, guests, room type preference. Queries your Rooms data table. Quotes price and availability. |
+| **Booking confirmation** | Confirms reservation details. Creates deal. Sends booking confirmation. |
+| **Spa / wellness** | Collects preferences. Checks availability. Books slot. |
+| **Restaurant reservation** | Collects date, time, party size, occasion. Creates reservation record. |
+| **Activities / experiences** | Collects interest and dates. Books activity or escalates to activities team. |
+| **Existing guest** | Looks up active booking. Answers questions about check-in, services, amenities. |
+| **Complaint** | Logs complaint with sentiment. Escalates immediately to duty manager. |
+| **VIP signal** | Detects NRI, anniversary, honeymoon, corporate signals. Escalates to senior sales with full context. |
+
+### Automations installed (13 pre-built)
+
+| Automation | Trigger | What it does |
+|---|---|---|
+| Welcome | First message | Greets customer, starts AI conversation |
+| Booking confirmed | Keyword "booking confirmed" | Sends template + creates deal at "Booking Confirmed" stage |
+| Pre-arrival D-7 | 7 days before check-in | Sends welcome info + upsells spa/dining |
+| Pre-arrival reminder | 1 day before check-in | Sends check-in time, directions, contact |
+| Check-in | Keyword "checked in" | Sends digital welcome pack, assigns to concierge |
+| Restaurant inquiry | Keyword "restaurant" | AI handles reservation |
+| Spa inquiry | Keyword "spa" | AI handles booking |
+| Complaint handler | Negative sentiment detected | Acknowledges, escalates to duty manager |
+| Post-stay review | 2 hours after checkout | Sends Google/TripAdvisor review request |
+| Loyalty query | Keyword "points" | AI answers questions about your loyalty program |
+| Late checkout request | Keyword "late checkout" | Checks availability, confirms or offers alternatives |
+| Reactivation | 90 days inactive | Sends personalised offer to lapsed guest |
+| Missed call recovery | Missed call → new message | "Sorry we missed your call. How can we help?" |
+
+### Pipeline stages created
+
+New Inquiry → Availability Checked → Booking Confirmed → Pre-Arrival → Checked In → Post-Stay
+
+### Wizard questions
+
+1. Property name, city, type (beach/hill/city/heritage/jungle)
+2. Room/accommodation types with max capacity (add as many as you have)
+3. Services offered: Spa, Restaurant, Pool, Activities, Events (toggle each + brief description)
+4. Business hours, timezone, after-hours message
+5. Escalation contact: duty manager phone, VIP contact phone
+
+---
+
+## Real Estate Pack {#real-estate-pack}
+
+**For:** Residential brokers, property developers, commercial real estate, property management companies
+
+### What the AI handles
+
+| Intent | AI behaviour |
+|---|---|
+| **New inquiry** | BANT qualification — collects budget, location, property type, timeline, decision authority |
+| **Specific property** | Looks up listing in your Properties data table. Shares price, area, availability. |
+| **Site visit request** | Books site visit on Google Calendar. Sends confirmation. |
+| **Document query** | Answers brochure/legal document questions from knowledge base. |
+| **Existing client** | Looks up deal status. Updates with latest info from agent. |
+| **Complaint** | Escalates immediately to principal broker with full context. |
+
+### Lead scoring (BANT)
+
+Each lead is automatically scored on 4 dimensions:
+
+| Dimension | What the AI assesses |
+|---|---|
+| **Budget** | Does their stated budget match your property prices? |
+| **Authority** | Are they the decision maker, or do they need spousal/family approval? |
+| **Need** | Is their requirement specific and clearly articulated? |
+| **Timeline** | Are they looking to buy in < 3 months, or just browsing? |
+
+**HOT lead (score ≥ 70):** Instant notification to broker. Suggest calling within 15 minutes.  
+**WARM lead (40–69):** Add to 7-day WhatsApp drip sequence.  
+**COLD lead (< 40):** Log in CRM, add to 90-day reactivation sequence.
+
+### Pipeline stages created
+
+New Inquiry → Qualified → Site Visit Booked → Site Visit Done → Proposal Sent → Negotiation → Closed Won / Closed Lost
+
+---
+
+## Healthcare Pack {#healthcare-pack}
+
+**For:** Multi-speciality clinics, dental practices, diagnostics, physiotherapy, wellness centres
+
+### What the AI handles
+
+| Intent | AI behaviour |
+|---|---|
+| **New patient** | Collects name, phone, reason for visit, preferred doctor, preferred slot |
+| **Appointment booking** | Checks doctor availability, books slot on calendar, sends confirmation |
+| **Existing patient** | Looks up upcoming appointment, answers questions about preparation |
+| **Lab / diagnostics** | Explains test preparation, location, reporting time |
+| **Emergency** | Immediately provides emergency contact, does not attempt to book |
+| **Prescription query** | Escalates to doctor or nurse — AI never gives medical advice |
+| **Billing** | Answers general billing questions, escalates for specific queries |
+
+### Compliance built in
+
+The Healthcare pack includes automatic compliance guardrails:
+- AI never provides diagnosis or specific medical advice
+- Every conversation starts with a privacy disclaimer
+- Emergency signals (chest pain, unconscious, accident) immediately surface emergency contact
+- Patient data is treated as PHI — agents see a "PHI Caution" flag on conversations
+
+---
+
+## Education Pack {#education-pack}
+
+**For:** Coaching centres, ed-tech platforms, professional training, test prep institutes
+
+### What the AI handles
+
+| Intent | AI behaviour |
+|---|---|
+| **Course inquiry** | Collects student profile (qualification, goal, timeline). Recommends suitable course from your Courses table. |
+| **Demo class booking** | Books a demo class slot. Sends joining link via WhatsApp. |
+| **Fee / scholarship** | Answers fee structure questions from knowledge base. Mentions scholarship criteria. |
+| **Enrollment** | Collects student details, creates enrollment record, sends payment link. |
+| **Parent inquiry** | Adapts tone and content for parent vs. student conversations. |
+| **Complaint / feedback** | Escalates to academic coordinator. |
+
+### Automations installed
+
+- Demo class reminder (T-24h and T-1h)
+- Post-demo follow-up: "What did you think of the session?"
+- Enrollment deadline reminder (3 days before batch starts)
+- Fee reminder (7 days before due date)
+- Parent progress report dispatch (monthly)
+
+---
+
+## Law Firm Pack {#law-firm-pack}
+
+**For:** Individual advocates, law firms, legal consultancies, dispute resolution
+
+### What the AI handles
+
+| Intent | AI behaviour |
+|---|---|
+| **New client inquiry** | Collects case type, brief facts, urgency level |
+| **Consultation booking** | Books initial consultation slot, sends calendar invite and pre-consultation form |
+| **Document query** | Searches legal FAQ knowledge base for general questions |
+| **Case status** | Escalates to assigned attorney — AI does not access case files |
+| **Fee inquiry** | Provides general fee ranges from knowledge base, offers consultation for precise quote |
+| **Emergency / urgent** | Flags conversation as urgent, notifies duty attorney |
+
+### Compliance guardrails
+
+- AI never provides legal advice — only general information
+- Every conversation ends with: "This information is for general guidance only and does not constitute legal advice."
+- Bar Council disclosure included in initial message if configured
+
+---
+
+## HR & Recruitment Pack {#hr-pack}
+
+**For:** Staffing agencies, corporate HR teams, talent acquisition, placement consultancies
+
+### What the AI handles
+
+| Intent | AI behaviour |
+|---|---|
+| **Job inquiry** | Collects desired role, experience, location preference. Matches against your Job Openings table. |
+| **Application** | Collects resume link, current CTC, notice period. Creates candidate record. |
+| **Interview scheduling** | Books interview slot with recruiter. Sends confirmation with interview details. |
+| **Status check** | Gives application status update. |
+| **Employer inquiry** | Handles companies looking to fill positions. Collects hiring brief. Creates client lead. |
+
+### Data Tables for HR
+
+**Job Openings table:**
+- Role, department, location, experience range, salary band, openings count, status (active/closed)
+
+**Candidates table** (auto-populated from conversations):
+- Name, phone, email, role applied for, current CTC, notice period, status, interview date
+
+---
+
+## Customising a pack after install
+
+Installing a pack gives you a pre-configured starting point. You can customise every part of it:
+
+- Edit any automation's trigger, steps, or messages
+- Add new automations for scenarios the pack doesn't cover
+- Modify the AI's system prompt to match your exact tone and brand
+- Update Data Tables as your inventory changes
+- Add or remove pipeline stages
+
+<Warning>
+Uninstalling a pack removes the automations and pipeline stages it created. Any deals already in the pipeline stages will remain, but the stages will be gone. Export your pipeline data before uninstalling.
+</Warning>
+
+---
+
+## Running multiple packs
+
+Each organisation can only have one active Industry Pack at a time. If your business spans multiple industries (e.g. a company that does both real estate and property management), contact support — we can configure a custom setup.

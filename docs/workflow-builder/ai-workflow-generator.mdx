@@ -1,0 +1,153 @@
+---
+title: "AI Workflow Generator"
+description: "Describe your business in plain English and Lynq builds the workflow for you"
+---
+
+The AI Workflow Generator lets you skip the canvas entirely for your first workflow. Describe what you want in plain English — Lynq uses AI to generate the blocks, configure them, and lay out the workflow on the canvas. You then review and adjust.
+
+---
+
+## How it works
+
+1. Click **Create Workflow** → **Generate with AI**
+2. Describe your business and what you want to automate
+3. Lynq generates the complete workflow
+4. Review the blocks on the canvas, adjust anything, and publish
+
+The generator doesn't just create a generic template — it reads your description and configures each block's settings specifically for what you described.
+
+---
+
+## How to write a good prompt
+
+The better your description, the better the result. You don't need to be technical — just describe your business the way you'd explain it to a new hire.
+
+**Include these things:**
+- What kind of business you run
+- Which channel triggers the workflow (WhatsApp, phone call, etc.)
+- What information you want to collect from the customer
+- What happens at the end (booking, deal in your CRM, human handoff)
+- Any routing logic ("if they want a refund, escalate to human")
+
+---
+
+## Example prompts
+
+### Resort / hotel booking
+
+```
+I run a beach resort in Goa. When a customer messages my WhatsApp, 
+I want my AI to ask about their preferred dates, number of guests, 
+and room type (we have Standard, Deluxe, and Sea Villa). 
+
+Check our room availability table and quote the price. 
+If they confirm, book the dates, create a deal in my CRM pipeline, 
+and alert my reservations team on WhatsApp.
+
+If they're asking about spa or restaurant, collect their preferences 
+and forward to the relevant team.
+```
+
+### Real estate lead qualification
+
+```
+I'm a real estate broker. When a lead comes in through WhatsApp, 
+I want the AI to qualify them with BANT questions:
+- Budget range
+- Area/location preference  
+- Type of property (apartment, villa, commercial)
+- Timeline (ready to move vs. investing)
+- Authority (are they the decision maker)
+
+Score the lead. If HOT, create a deal and alert me immediately so 
+I can call them within 15 minutes. If WARM, add them to a 7-day 
+drip sequence. If COLD, just log in CRM with a follow-up task.
+```
+
+### Medical clinic
+
+```
+I run a dental clinic. When a patient calls after hours, the AI 
+should take their name, phone number, and preferred appointment 
+time. Check my Google Calendar for availability and offer 2-3 slots. 
+
+Once they confirm, book it and send a WhatsApp confirmation. 
+Send them a reminder the day before and 2 hours before.
+
+If they mention tooth pain or emergency, skip the booking and 
+give them our emergency number immediately.
+```
+
+### E-commerce customer support
+
+```
+When a customer messages our WhatsApp, detect if they're asking 
+about an order status, a return, or a product question.
+
+For order status: ask for their order ID, look it up in our 
+Shopify store, and reply with the current status.
+
+For returns: collect their order ID and reason, create a support 
+ticket, and tell them our team will reach out in 24 hours.
+
+For product questions: search our knowledge base and answer.
+```
+
+---
+
+## After generation
+
+The generator creates a complete workflow on the canvas. Before publishing:
+
+<Steps>
+  <Step title="Review each block">
+    Click each block and read its configuration. The AI sometimes uses generic text — replace it with your actual business name, hours, and specific details.
+  </Step>
+  <Step title="Test in the preview">
+    Click **Test Workflow** to simulate a conversation. Try a few different paths — a happy path (normal customer), a confused customer, and a complaint.
+  </Step>
+  <Step title="Connect your data">
+    If the workflow uses Data Tables or calendar lookups, make sure those are connected and populated before publishing.
+  </Step>
+  <Step title="Publish">
+    Click **Publish** when you're ready. The workflow goes live immediately.
+  </Step>
+</Steps>
+
+---
+
+## Editing a generated workflow
+
+The generated workflow is fully editable — it's identical to a workflow you'd build by hand. You can:
+
+- Add, remove, or reorder blocks
+- Change any block's configuration
+- Add new branches and conditions
+- Connect integrations
+
+The AI generator just gives you a starting point. Final control is always yours.
+
+---
+
+## Limitations
+
+The AI generator works best for workflows up to ~15 blocks. For very complex multi-agent workflows (lead qualification → sales call → drip sequence → CRM update → renewal) — consider using an [Industry Pack](/workflow-builder/industry-packs) which comes pre-built and tested for your industry.
+
+<Tip>
+You can use the generator iteratively. Generate a simple version first, publish it, see how customers interact with it, then use the generator again with more specific requirements to improve it.
+</Tip>
+
+---
+
+## What the AI can and can't configure automatically
+
+| The AI will configure | You need to do manually |
+|---|---|
+| Block types and order | Connect your WhatsApp account |
+| AI Conversation goals and personas | Connect Google Calendar |
+| Branch conditions | Add your products to Data Tables |
+| Message templates with variable placeholders | Enter your CRM API credentials |
+| Lead scoring criteria | Upload your knowledge base documents |
+| Routing logic | Set your business hours |
+
+The generator builds the logic skeleton — you connect your real accounts and data.

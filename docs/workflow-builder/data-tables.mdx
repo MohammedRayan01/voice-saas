@@ -1,0 +1,186 @@
+---
+title: "Data Tables"
+description: "Store your rooms, products, properties, and inventory inside Lynq so your AI can look them up during conversations"
+---
+
+## The problem Data Tables solve
+
+Imagine a hotel AI that a guest asks: "Do you have a sea-facing villa available for 4 guests on July 15th?"
+
+Without Data Tables, you'd have to write the answer into the AI's prompt — and update the prompt every time a room is booked, renovated, or repriced. That's not sustainable.
+
+**Data Tables** solves this. You store your rooms (or products, or properties, or job openings) in a simple table inside Lynq. The AI queries the table in real time during every conversation — so the answer is always accurate, and you never touch the workflow to update your inventory.
+
+---
+
+## What Data Tables looks like
+
+A Data Table is like a spreadsheet inside Lynq. You create it, define the columns, and add rows. Your team manages the data directly — no workflow editing ever required.
+
+**Example: Hotel Rooms table**
+
+| Name | Type | Max Guests | Price/Night | Available | Features |
+|---|---|---|---|---|---|
+| Room 101 | Standard | 2 | ₹4,500 | Yes | Garden view, King bed |
+| Room 205 | Deluxe | 3 | ₹7,200 | Yes | Pool view, King bed, Bathtub |
+| Villa A | Sea Villa | 4 | ₹18,000 | No | Sea facing, Private pool |
+| Villa B | Sea Villa | 6 | ₹24,000 | Yes | Sea facing, Private pool, BBQ |
+
+When a guest asks about availability, your AI calls **Get Table Row** with filters (type = Sea Villa, max guests ≥ 4, available = Yes) and gets back matching rooms to quote.
+
+---
+
+## Creating a Data Table
+
+1. Go to **Data Tables** in the left sidebar
+2. Click **Create Table**
+3. Name your table (e.g. "Rooms", "Products", "Property Listings")
+4. Add columns — choose a name and data type for each:
+
+| Column type | Use for |
+|---|---|
+| **Text** | Names, descriptions, locations |
+| **Number** | Prices, quantities, scores, dimensions |
+| **Yes/No** | Availability, is_active, has_parking |
+| **Date** | Available from, booking date, expiry |
+| **List** | Tags, features, room amenities |
+| **Link** | URLs to images, brochures, booking pages |
+
+5. Click **Create**
+6. Start adding rows — manually, or by importing a CSV
+
+---
+
+## Populating your table
+
+### Manual entry
+Click **Add Row** to enter data one row at a time. Good for small tables (under 50 rows).
+
+### CSV import
+Click **Import CSV** to upload a spreadsheet. Lynq will match your columns automatically. Good for large inventories.
+
+### API (for developers)
+Use the Lynq API to sync data programmatically from your existing system. See the [API reference](/api-reference/data-tables/create-row) for details.
+
+---
+
+## Using a table in a workflow
+
+Once your table exists, use the **Get Table Row** and **Update Table Row** blocks in your workflow.
+
+### Get Table Row
+
+Use this to look up data mid-conversation.
+
+**Example configuration:**
+- **Table:** Rooms
+- **Filter:** `type = {{collected.room_type}}` AND `max_guests >= {{collected.guests}}` AND `available = Yes`
+- **Sort by:** Price ascending
+- **Return:** First match
+
+The AI then receives the matching row's data and can reference it in its response: *"We have the Deluxe Room (Pool view, ₹7,200/night) available for 3 guests. Would you like to book it?"*
+
+### Update Table Row
+
+Use this to write back to your table after an action.
+
+**Example:** When a booking is confirmed, update the room's `Available` column to `No`:
+- **Table:** Rooms
+- **Filter:** `name = {{booking.room_name}}`
+- **Update:** Set `available = No`, Set `booked_until = {{booking.checkout_date}}`
+
+---
+
+## Common Data Table setups by industry
+
+### Hospitality (hotels, resorts, homestays)
+
+**Rooms table:**
+- Room name, type (Standard/Deluxe/Suite/Villa), max guests, price per night, available (Yes/No), amenities, image URL
+
+**Packages table:**
+- Package name, includes (what's in the package), price, valid dates, max bookings
+
+**Services table:**
+- Service name (Spa/Restaurant/Activity), description, price, booking required (Yes/No), contact person
+
+---
+
+### Real Estate
+
+**Property Listings table:**
+- Property name, type (Apartment/Villa/Plot), location, area (sqft), bedrooms, price, status (Available/Sold/Hold), image URL, brochure URL, highlights
+
+**Projects table:**
+- Project name, developer, location, total units, available units, possession date, RERA number
+
+---
+
+### E-commerce / Retail
+
+**Products table:**
+- Product name, SKU, category, price, stock count, description, image URL, variants
+
+**Orders table** (read-only, synced from Shopify):
+- Order ID, customer name, status, tracking URL, items
+
+---
+
+### Education / Coaching
+
+**Courses table:**
+- Course name, subject, duration, fee, next batch date, mode (Online/Offline), seats remaining
+
+**Demo classes table:**
+- Course, date, time, tutor, seats remaining, registration link
+
+---
+
+### Healthcare
+
+**Doctors table:**
+- Doctor name, specialization, available days, available times, consultation fee, next available slot
+
+**Services table:**
+- Service name, department, description, typical duration, preparation required
+
+---
+
+## Keeping your table accurate
+
+The most important rule: **update your table, not your workflow**.
+
+When a room gets booked → update the `available` column in the Rooms table.  
+When you add a new product → add a row to the Products table.  
+When prices change → edit the `price` column in the table.
+
+Your AI automatically reads the latest data on every conversation — there's nothing else to change.
+
+<Tip>
+Assign one team member as the "table keeper" for each Data Table. They update the table whenever your inventory or availability changes. This person does not need any technical knowledge — it's as simple as editing a spreadsheet.
+</Tip>
+
+---
+
+## Table permissions
+
+| Role | Can view | Can edit | Can delete |
+|---|---|---|---|
+| Admin | Yes | Yes | Yes |
+| Manager | Yes | Yes | No |
+| Agent | Yes | No | No |
+
+---
+
+## Data Tables vs. Knowledge Base
+
+Both store information the AI can use — but they serve different purposes:
+
+| | Data Tables | Knowledge Base |
+|---|---|---|
+| Best for | Structured data you query with filters (rooms, products, prices) | Unstructured text you search by meaning (FAQs, policies, guides) |
+| Format | Rows and columns | Documents and text |
+| Query type | Exact match with filters ("sea villa, ≥4 guests, available") | Semantic search ("what is your cancellation policy?") |
+| Updated by | Your team directly | Upload new documents |
+
+Use both together: Data Tables for inventory and pricing, Knowledge Base for policies and FAQs.

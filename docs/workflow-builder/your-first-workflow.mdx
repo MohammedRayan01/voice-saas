@@ -1,0 +1,193 @@
+---
+title: "Your First Workflow"
+description: "Build a working WhatsApp booking workflow from scratch in under 10 minutes"
+---
+
+This guide walks you through building a real workflow: a WhatsApp booking handler that collects customer info and confirms an appointment. By the end, your AI will be able to:
+
+- Greet incoming WhatsApp messages
+- Collect the customer's name and preferred appointment time
+- Book the slot on your Google Calendar
+- Send a confirmation message
+
+**Time to complete:** 8–10 minutes
+
+---
+
+## Before you start
+
+Make sure you have:
+
+- A Lynq account with a connected WhatsApp number ([set up here](/whatsapp/settings))
+- A connected Google Calendar ([set up here](/integrations/google-calendar)) — optional, but needed for the booking step
+
+---
+
+## Step 1: Create a new workflow
+
+1. Go to **Workflow** in the left sidebar
+2. Click **Create Workflow**
+3. Give it a name — e.g. "Appointment Booking"
+4. Click **Create**
+
+You'll see the workflow canvas with one block already placed: the **Trigger** block.
+
+---
+
+## Step 2: Configure the Trigger
+
+Click the Trigger block to open its settings.
+
+1. Set **Trigger type** to **Inbound WhatsApp**
+2. Set **Channel** to your WhatsApp number
+3. Leave the other settings as defaults
+
+This means: whenever a customer messages your WhatsApp, this workflow starts.
+
+Click **Save**.
+
+---
+
+## Step 3: Add an AI Conversation block
+
+This block handles the actual conversation — greeting the customer and collecting their info.
+
+1. Click the **+** button below the Trigger block
+2. Select **AI** → **AI Conversation**
+3. Click the new block to configure it
+
+In the **Goal** field, enter:
+```
+Greet the customer warmly. Ask for their full name and preferred date and time for an appointment. Confirm once you have both.
+```
+
+In the **Persona** field, enter:
+```
+You are a friendly receptionist for [your business name]. Keep responses short and conversational. You are speaking over WhatsApp.
+```
+
+This is the instruction you give to the AI — it will figure out how to have the conversation naturally based on these goals. You don't need to script every message.
+
+Click **Save**.
+
+---
+
+## Step 4: Add a Create Appointment block
+
+Once the AI has collected the name and preferred time, this block books it.
+
+1. Click **+** below the AI Conversation block
+2. Select **Data** → **Create Appointment**
+3. Configure:
+   - **Calendar:** Select your connected Google Calendar
+   - **Title:** `Appointment with {{contact.name}}`
+   - **Start time:** `{{collected.preferred_datetime}}`
+   - **Duration:** `30 minutes`
+   - **Guest email:** `{{contact.email}}` (leave blank if you don't collect email)
+
+<Info>
+The `{{collected.preferred_datetime}}` variable is automatically populated by the AI Conversation block above — it extracts what the customer said into a structured date/time value.
+</Info>
+
+Click **Save**.
+
+---
+
+## Step 5: Add a Send WhatsApp block
+
+Confirm the booking with the customer.
+
+1. Click **+** below the Create Appointment block
+2. Select **Channel** → **Send WhatsApp**
+3. Enter the message:
+
+```
+Your appointment is confirmed for {{appointment.start_time_formatted}}. 
+We'll see you then, {{contact.name}}! 
+
+If you need to reschedule, just reply here.
+```
+
+Click **Save**.
+
+---
+
+## Step 6: (Optional) Alert your team
+
+If you want a notification when someone books:
+
+1. Click **+** below the Send WhatsApp block
+2. Select **Notification** → **Alert Team**
+3. Configure:
+   - **Send via:** WhatsApp or Email
+   - **To:** Your phone number or email
+   - **Message:** `New appointment booked by {{contact.name}} for {{appointment.start_time_formatted}}`
+
+---
+
+## Step 7: Publish and test
+
+1. Click **Publish** in the top-right corner
+2. Send a test message to your WhatsApp number — something like "Hi, I'd like to book an appointment"
+3. Watch the AI handle the conversation
+
+You should see:
+- AI responds with a greeting and asks for your name + time
+- Once you provide both, the appointment appears in your Google Calendar
+- You receive a confirmation message on WhatsApp
+
+---
+
+## What your workflow looks like
+
+```
+Inbound WhatsApp (Trigger)
+    ↓
+AI Conversation — "Collect name + preferred time"
+    ↓
+Create Appointment — books on Google Calendar
+    ↓
+Send WhatsApp — "Your appointment is confirmed..."
+    ↓
+Alert Team — notifies you via WhatsApp
+```
+
+5 blocks. Working 24/7. No code.
+
+---
+
+## Common issues
+
+<AccordionGroup>
+  <Accordion title="The AI keeps asking for info it already has">
+    Check the **Goal** text in your AI Conversation block. Be specific about exactly what you want collected. Example: "Collect: (1) full name, (2) preferred date, (3) preferred time. Confirm once you have all three."
+  </Accordion>
+  <Accordion title="The appointment shows wrong time zone">
+    Go to **Settings → Organisation → Time Zone** and make sure it matches your location. The AI interprets times in your organisation's timezone.
+  </Accordion>
+  <Accordion title="The confirmation message uses {{contact.name}} literally">
+    Make sure the AI Conversation block comes *before* the Send WhatsApp block — variables are only populated after the AI has extracted them.
+  </Accordion>
+  <Accordion title="I want to add a condition — only book during business hours">
+    Add a **Branch** block after the Trigger. Set the condition to: "Current time is between 9am and 6pm on a weekday." If true, continue to the AI block. If false, add a **Send WhatsApp** block with an after-hours message.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## What to build next
+
+<CardGroup cols={2}>
+  <Card title="Add a Lead Score" icon="star" href="/workflow-builder/the-8-blocks#3-ai-blocks">
+    Add a Lead Scorer block to route high-value customers to your direct line
+  </Card>
+  <Card title="Industry Packs" icon="box" href="/workflow-builder/industry-packs">
+    Install a pre-built workflow for your specific industry
+  </Card>
+  <Card title="Data Tables" icon="table" href="/workflow-builder/data-tables">
+    Store your products or availability so the AI can look them up
+  </Card>
+  <Card title="Connect Your CRM" icon="plug" href="/workflow-builder/integrations">
+    Push every booking directly into HubSpot, Zoho, or Salesforce
+  </Card>
+</CardGroup>

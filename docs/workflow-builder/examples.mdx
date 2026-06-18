@@ -1,0 +1,343 @@
+---
+title: "Workflow Examples"
+description: "Complete workflow walkthroughs for real business use cases across every industry"
+---
+
+Real examples of what businesses build with Lynq. Each example shows the full block sequence, the AI's goals, and what the customer experience looks like.
+
+---
+
+## Hospitality: Resort Booking on WhatsApp
+
+**Business:** Beach resort in Goa with Standard, Deluxe, and Sea Villa room types  
+**Goal:** Guest messages WhatsApp → AI checks availability → quotes price → confirms booking
+
+### The workflow
+
+```
+Inbound WhatsApp (Trigger)
+    ↓
+Intent Classifier (AI)
+    ├─ ROOM_INQUIRY → Room booking path
+    ├─ SPA → Spa booking path
+    ├─ RESTAURANT → Restaurant path
+    ├─ EXISTING_GUEST → Guest services path
+    └─ COMPLAINT → Escalate immediately
+```
+
+**Room booking path:**
+
+```
+AI Conversation
+  Goal: "Ask for check-in date, check-out date, number of guests, 
+         and room type preference. Confirm once you have all four."
+    ↓
+Get Table Row (Data Tables → Rooms)
+  Filter: type = {{collected.room_type}}, 
+          max_guests >= {{collected.guests}},
+          available = Yes
+  Sort: price ascending
+    ↓
+Branch: Room found?
+  YES:
+    → AI Conversation
+        Goal: "Tell the guest about the available room including price per night,
+               total for their stay, and amenities. Ask them to confirm."
+    → Create Appointment (books dates on calendar)
+    → Update Table Row (mark room as unavailable)
+    → Create Deal (stage: "Booking Confirmed")
+    → Send WhatsApp: "Booking confirmed! See you on {{checkin_date}}. 
+                      Booking ref: {{deal.id}}"
+    → Alert Team: "New booking: {{room_name}}, {{checkin_date}} to {{checkout_date}},
+                   {{guests}} guests. Guest: {{contact.name}} {{contact.phone}}"
+  NO:
+    → AI Conversation
+        Goal: "Apologise that the requested room is not available for those dates.
+               Suggest alternative room types from: {{available_alternatives}}.
+               Or offer to add them to a waitlist."
+```
+
+### What the conversation looks like
+
+> **Guest:** Hi, do you have a sea villa available for 4 people from July 15-18?  
+> **AI:** Hello! We'd love to host you. Just to confirm — you're looking for a Sea Villa for 4 guests checking in July 15 and checking out July 18, that's 3 nights. Is that right?  
+> **Guest:** Yes exactly  
+> **AI:** Great news! Sea Villa B is available for those dates. It's ₹18,000 per night — ₹54,000 for 3 nights. It includes a private pool, sea-facing terrace, BBQ area, and daily breakfast. Shall I confirm the booking?  
+> **Guest:** Yes please  
+> **AI:** Your booking is confirmed! Booking reference: #4821. You'll receive a detailed confirmation shortly. We look forward to welcoming you on July 15th!
+
+---
+
+## Real Estate: Lead Qualification + Auto-Scoring
+
+**Business:** Residential real estate broker in Mumbai  
+**Goal:** WhatsApp inquiry → AI qualifies lead → scores and routes hot/warm/cold → alerts broker for hot leads
+
+### The workflow
+
+```
+Inbound WhatsApp (Trigger)
+    ↓
+AI Conversation (AI)
+  Goal: "Qualify this lead with BANT:
+         B - Budget: What is their total budget?
+         A - Authority: Are they the sole decision maker?
+         N - Need: What exactly are they looking for? (area, bedrooms, type)
+         T - Timeline: When do they plan to purchase?
+         
+         Also collect: are they NRI? Looking for investment or self-use?
+         
+         Be conversational — don't ask all questions at once."
+    ↓
+Lead Scorer (AI)
+  Scoring criteria:
+    Budget ≥ ₹1Cr: +25 points
+    Clear Authority (sole DM): +20 points
+    Specific Need (area + bedrooms stated): +20 points
+    Timeline ≤ 3 months: +25 points
+    NRI or investment buyer: +10 points
+    ↓
+Branch: Score?
+  ≥ 70 (HOT):
+    → Create Deal (pipeline: "Sales", stage: "Hot Lead")
+    → Update Contact (custom fields: budget, location, timeline, lead_score)
+    → Alert Team: "🔥 HOT LEAD — {{contact.name}} ({{contact.phone}})
+                   Budget: {{collected.budget}}
+                   Looking for: {{collected.property_need}}
+                   Timeline: {{collected.timeline}}
+                   Score: {{lead_score}}/100
+                   Call within 15 minutes!"
+    → Send WhatsApp: "Thank you {{contact.first_name}}! One of our senior 
+                      advisors will call you shortly to discuss properties 
+                      that match your requirements."
+                      
+  40–69 (WARM):
+    → Create Deal (stage: "Warm Lead")
+    → Send WhatsApp: "Thank you! I've noted your requirements. 
+                      We'll share some matching properties with you shortly."
+    → Wait 1 day
+    → Content Generator: "Based on {{collected.location}}, {{collected.bedrooms}}, 
+                           {{collected.budget}}, write a personalised WhatsApp message 
+                           sharing 2-3 property highlights we have available."
+    → Send WhatsApp (generated message)
+    → Wait 3 days → repeat follow-up...
+    
+  < 40 (COLD):
+    → Create Deal (stage: "Cold Lead")
+    → Send WhatsApp: "Thank you for reaching out! We'll keep you updated 
+                      as new properties come to market that match what you're looking for."
+    → Add to 90-day reactivation sequence
+```
+
+---
+
+## Healthcare: After-Hours Patient Intake
+
+**Business:** Multi-specialty clinic  
+**Goal:** Patient calls after business hours → AI takes their details → books next available slot
+
+### The workflow
+
+```
+Inbound Call (Trigger)
+    ↓
+Branch: Is it business hours?
+  YES → Hand off to receptionist
+  NO:
+    ↓
+    Start Voice Call (AI answering machine / after-hours mode)
+      Persona: "Friendly receptionist, empathetic, clear speech"
+      Goal: "Inform the patient the clinic is currently closed.
+             Ask for their name, phone number, reason for visit, 
+             and preferred appointment time (morning/afternoon/specific date).
+             Reassure them the team will call back first thing tomorrow."
+    ↓
+    Branch: Emergency keywords detected?
+      (chest pain, unconscious, accident, can't breathe, severe bleeding)
+      YES:
+        → Send SMS: "Emergency? Please call 108 or go to the nearest hospital immediately."
+        → End Call
+      NO:
+        → Create Contact (name, phone, reason, preferred_time)
+        → Create Deal (pipeline: "Appointments", stage: "After-Hours Request")
+        → Alert Team: "After-hours call: {{contact.name}} ({{contact.phone}})
+                       Reason: {{collected.reason}}
+                       Preferred time: {{collected.preferred_time}}
+                       Call back first thing tomorrow."
+        → Send SMS to patient: "Your request has been logged. 
+                                 Our team will call you first thing tomorrow at {{contact.phone}}."
+```
+
+---
+
+## E-commerce: Order Status + Returns
+
+**Business:** Online clothing store  
+**Goal:** Customer messages WhatsApp → AI detects intent → handles order lookup or return request
+
+### The workflow
+
+```
+Inbound WhatsApp (Trigger)
+    ↓
+Intent Classifier (AI)
+    ├─ ORDER_STATUS → Order lookup path
+    ├─ RETURN_REQUEST → Returns path
+    ├─ PRODUCT_QUESTION → Knowledge base search
+    └─ OTHER → AI Conversation (general)
+```
+
+**Order Status path:**
+```
+AI Conversation
+  Goal: "Ask for their order ID or phone number to look up their order."
+    ↓
+HTTP Request
+  URL: https://api.yourstore.com/v1/orders/lookup
+  Body: { "identifier": "{{collected.order_id_or_phone}}" }
+  Save as: order_data
+    ↓
+Branch: Order found?
+  YES:
+    → Send WhatsApp: 
+      "Here's your order status:
+       Order #{{order_data.id}} — {{order_data.status}}
+       Items: {{order_data.items_summary}}
+       {{order_data.tracking_url ? 'Track your order: ' + order_data.tracking_url : ''}}"
+  NO:
+    → Send WhatsApp: "I couldn't find an order with that ID. 
+                      Could you double-check the order number? 
+                      It's in your confirmation email subject line."
+```
+
+**Returns path:**
+```
+AI Conversation
+  Goal: "Collect their order ID and the reason for return 
+         (wrong size/damaged/changed mind/other)."
+    ↓
+Create Ticket
+  Subject: "Return request — Order {{collected.order_id}}"
+  Details: "Reason: {{collected.return_reason}} | Customer: {{contact.phone}}"
+  Priority: {{collected.reason == 'damaged' ? 'high' : 'normal'}}
+    ↓
+Send WhatsApp: 
+  "Your return request has been logged (Ticket #{{ticket.id}}). 
+   Our team will reach out within 24 hours with return instructions. 
+   {{collected.reason == 'damaged' ? 'Since your item arrived damaged, we will prioritise your case.' : ''}}"
+```
+
+---
+
+## HR: Job Application + Interview Scheduling
+
+**Business:** IT staffing firm  
+**Goal:** Candidate messages WhatsApp about a job opening → AI collects profile → books interview
+
+### The workflow
+
+```
+Inbound WhatsApp (Trigger)
+    ↓
+Intent Classifier (AI)
+    ├─ JOB_APPLICATION → Candidate path
+    └─ EMPLOYER_INQUIRY → Client path
+```
+
+**Candidate path:**
+```
+AI Conversation
+  Goal: "Collect: (1) candidate's full name, (2) role they're applying for, 
+         (3) years of experience, (4) current CTC, (5) expected CTC, 
+         (6) notice period, (7) current location, (8) skills summary.
+         
+         Also ask them to share their resume as a document or Google Drive link."
+    ↓
+Get Table Row (Job Openings table)
+  Filter: role matches {{collected.role}}, status = Active
+    ↓
+Branch: Matching opening found?
+  YES:
+    → Create Contact (candidate profile)
+    → Create Deal (pipeline: "Candidates", stage: "Applied")
+    → Check Calendar (recruiter availability for next 3 days)
+    → AI Conversation
+        Goal: "Present 2-3 available interview slots. Collect their preference."
+    → Create Appointment (interview slot)
+    → Send WhatsApp: 
+        "Interview confirmed for {{interview.datetime}} via {{interview.mode}}.
+         {{interview.mode == 'video' ? 'Meeting link: ' + interview.link : 'Location: ' + interview.address}}
+         Please keep your resume ready. All the best!"
+    → Alert Team: "New candidate: {{contact.name}} for {{collected.role}}
+                   Interview: {{interview.datetime}}
+                   CTC: {{collected.current_ctc}} → {{collected.expected_ctc}}
+                   Notice: {{collected.notice_period}}"
+  NO:
+    → Send WhatsApp: 
+        "We don't have an active opening for {{collected.role}} right now. 
+         I've saved your profile and we'll reach out as soon as a matching 
+         opportunity comes up!"
+    → Create Contact (flag: "passive_candidate")
+```
+
+---
+
+## Key patterns to reuse
+
+These patterns appear across almost every industry — learn them once and apply them everywhere.
+
+### The "collect and qualify" pattern
+
+```
+AI Conversation (collect info)
+    → Lead Scorer
+    → Branch on score
+        HOT: Alert Team immediately
+        WARM: Drip sequence
+        COLD: CRM + reactivation
+```
+
+### The "look up and quote" pattern
+
+```
+AI Conversation (collect criteria)
+    → Get Table Row (filter on criteria)
+    → Branch: found?
+        YES: AI Conversation (present options)
+        NO: AI Conversation (offer alternatives or waitlist)
+```
+
+### The "book and confirm" pattern
+
+```
+AI Conversation (collect preferred time)
+    → Check Calendar (availability)
+    → AI Conversation (present slots, get confirmation)
+    → Create Appointment
+    → Send WhatsApp (confirmation)
+    → Alert Team
+    → Wait → Send reminder T-24h → Send reminder T-2h
+```
+
+### The "after-hours" pattern
+
+```
+Branch: Is current time within business hours?
+    YES: Continue main workflow
+    NO: Send WhatsApp ("We're closed. Back at 9am.")
+        → Create Contact / Create Ticket
+        → Alert Team (morning notification)
+```
+
+### The "escalate on sentiment" pattern
+
+```
+Sentiment Analyzer
+    → Branch: sentiment = negative?
+        YES: 
+            → Add tag: "complaint"
+            → Alert Team: "Customer complaint — {{contact.name}}: {{message_summary}}"
+            → Assign to Agent (senior support)
+            → Send WhatsApp: "We're sorry to hear that. A senior team member will reach out within the hour."
+        NO: Continue normal flow
+```

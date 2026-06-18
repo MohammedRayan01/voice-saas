@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from api.routes.agent_stream import router as agent_stream_router
 from api.routes.chat import router as chat_router
+from api.routes.data_tables import router as data_tables_router
 from api.routes.whatsapp import router as whatsapp_router
 from api.routes.contacts import router as contacts_router
 from api.routes.escalations import router as escalations_router
@@ -70,6 +71,7 @@ router.include_router(escalations_router)
 router.include_router(billing_router)
 router.include_router(webhooks_router)
 router.include_router(chat_router)
+router.include_router(data_tables_router)
 router.include_router(whatsapp_router)
 
 for _integration_router in all_routers():

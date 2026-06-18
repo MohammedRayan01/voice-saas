@@ -200,6 +200,96 @@ async def _execute_step(
         if workflow_id and sender_phone:
             await _trigger_voice_call(org_id, sender_phone, workflow_id)
 
+    elif step_type == "alert_team":
+        # Send a WhatsApp or email notification to a team member
+        channel = cfg.get("channel", "whatsapp")  # whatsapp | email
+        to = _interpolate(cfg.get("to", ""), context)
+        message = _interpolate(cfg.get("message", ""), context)
+        if to and message:
+            if channel == "whatsapp":
+                await meta_client.send_text(org_id, to, message)
+            elif channel == "email":
+                await _send_alert_email(to, message, cfg.get("subject", "Lynq Alert"))
+
+    elif step_type == "set_variable":
+        # Store a value into context["collected"] for use in downstream steps
+        key = cfg.get("key", "")
+        value = _interpolate(str(cfg.get("value", "")), context)
+        if key:
+            if "collected" not in context:
+                context["collected"] = {}
+            context["collected"][key] = value
+
+    elif step_type == "score_lead":
+        # Calculate a lead score from collected fields and store in context
+        criteria = cfg.get("criteria", [])
+        # Each criterion: {field, op, value, points}
+        total = 0
+        for criterion in criteria:
+            field_path = criterion.get("field", "")
+            op = criterion.get("op", "eq")
+            expected = criterion.get("value")
+            points = int(criterion.get("points", 0))
+            check_cfg = {"field": field_path, "op": op, "value": expected}
+            if _evaluate_condition(check_cfg, context):
+                total += points
+
+        score_key = cfg.get("store_as", "lead_score")
+        if "collected" not in context:
+            context["collected"] = {}
+        context["collected"][score_key] = total
+
+        # Also classify into HOT/WARM/COLD if thresholds are set
+        hot_threshold = cfg.get("hot_threshold", 70)
+        warm_threshold = cfg.get("warm_threshold", 40)
+        if total >= hot_threshold:
+            context["collected"]["lead_tier"] = "hot"
+        elif total >= warm_threshold:
+            context["collected"]["lead_tier"] = "warm"
+        else:
+            context["collected"]["lead_tier"] = "cold"
+
+    elif step_type == "get_table_row":
+        # Query a Data Table and store matching row(s) in context
+        table_name = _interpolate(cfg.get("table", ""), context)
+        filters_raw = cfg.get("filters", [])
+        store_as = cfg.get("store_as", "table_row")
+        limit = cfg.get("limit", 1)
+
+        # Resolve variable references in filter values
+        filters = []
+        for f in filters_raw:
+            filters.append({
+                "field": f.get("field", ""),
+                "op": f.get("op", "eq"),
+                "value": _interpolate(str(f.get("value", "")), context),
+            })
+
+        if table_name:
+            rows = await _query_data_table(org_id, table_name, filters, limit)
+            if "collected" not in context:
+                context["collected"] = {}
+            if limit == 1:
+                context["collected"][store_as] = rows[0] if rows else {}
+            else:
+                context["collected"][store_as] = rows
+
+    elif step_type == "update_table_row":
+        # Update a row in a Data Table
+        table_name = _interpolate(cfg.get("table", ""), context)
+        row_id = cfg.get("row_id")
+        if not row_id:
+            # Try to get it from context if stored by a prior get_table_row step
+            row_source = cfg.get("row_id_from", "table_row")
+            row_data = context.get("collected", {}).get(row_source, {})
+            row_id = row_data.get("id") if isinstance(row_data, dict) else None
+
+        updates_raw = cfg.get("updates", {})
+        updates = {k: _interpolate(str(v), context) for k, v in updates_raw.items()}
+
+        if table_name and row_id and updates:
+            await _update_data_table_row(org_id, table_name, int(row_id), updates)
+
     else:
         logger.debug(f"[automation] unknown step_type={step_type}, skipping")
 
@@ -454,6 +544,109 @@ async def _schedule_step(
 async def _get_arq_redis():
     from api.tasks.arq import get_arq_redis
     return await get_arq_redis()
+
+
+async def _send_alert_email(to: str, message: str, subject: str) -> None:
+    """Send an alert email via Resend (if configured) or log a warning."""
+    try:
+        import httpx
+        from api.constants import RESEND_API_KEY  # type: ignore[attr-defined]
+        if not RESEND_API_KEY:
+            logger.warning(f"[automation] alert_team email: RESEND_API_KEY not set, skipping email to {to}")
+            return
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
+                json={
+                    "from": "alerts@lynq.ai",
+                    "to": [to],
+                    "subject": subject,
+                    "text": message,
+                },
+                timeout=10,
+            )
+    except ImportError:
+        logger.warning(f"[automation] alert_team email: RESEND_API_KEY constant not found")
+    except Exception as exc:
+        logger.error(f"[automation] alert_team email failed to {to}: {exc}")
+
+
+async def _query_data_table(
+    org_id: int,
+    table_name: str,
+    filters: list[dict],
+    limit: int = 1,
+) -> list[dict]:
+    """Query rows from a named Data Table with the given filters."""
+    from api.db.models import OrgDataRowModel, OrgDataTableModel
+    from api.routes.data_tables import _row_matches_filters
+    from sqlalchemy import select
+
+    async with _db.async_session() as s:
+        # Look up table by name
+        r = await s.execute(
+            select(OrgDataTableModel).where(
+                OrgDataTableModel.organization_id == org_id,
+                OrgDataTableModel.name == table_name,
+            )
+        )
+        table = r.scalar_one_or_none()
+        if not table:
+            logger.warning(f"[automation] get_table_row: table '{table_name}' not found for org {org_id}")
+            return []
+
+        # Load all rows and filter in Python (tables are typically small)
+        r2 = await s.execute(
+            select(OrgDataRowModel).where(OrgDataRowModel.table_id == table.id)
+        )
+        all_rows = r2.scalars().all()
+
+    matching = [
+        {"id": row.id, **row.data}
+        for row in all_rows
+        if _row_matches_filters(row.data, filters)
+    ]
+    return matching[:limit]
+
+
+async def _update_data_table_row(
+    org_id: int,
+    table_name: str,
+    row_id: int,
+    updates: dict,
+) -> None:
+    """Update fields in a Data Table row."""
+    from api.db.models import OrgDataRowModel, OrgDataTableModel
+    from sqlalchemy import select
+    from datetime import UTC, datetime
+
+    async with _db.async_session() as s:
+        r = await s.execute(
+            select(OrgDataTableModel).where(
+                OrgDataTableModel.organization_id == org_id,
+                OrgDataTableModel.name == table_name,
+            )
+        )
+        table = r.scalar_one_or_none()
+        if not table:
+            logger.warning(f"[automation] update_table_row: table '{table_name}' not found")
+            return
+
+        r2 = await s.execute(
+            select(OrgDataRowModel).where(
+                OrgDataRowModel.id == row_id,
+                OrgDataRowModel.table_id == table.id,
+            )
+        )
+        row = r2.scalar_one_or_none()
+        if not row:
+            logger.warning(f"[automation] update_table_row: row {row_id} not found in table '{table_name}'")
+            return
+
+        row.data = {**row.data, **updates}
+        row.updated_at = datetime.now(UTC)
+        await s.commit()
 
 
 async def _store_outbound(conv_id: int, text: str, wamid: str) -> None:
