@@ -20,7 +20,11 @@ const SECTION_ORDER: Array<{ category: NodeSpec['category']; title: string }> = 
     { category: 'trigger', title: 'Triggers' },
     { category: 'call_node', title: 'Agent Nodes' },
     { category: 'global_node', title: 'Global Nodes' },
+    { category: 'logic', title: 'Logic' },
+    { category: 'data', title: 'Data' },
+    { category: 'notification', title: 'Notifications' },
     { category: 'integration', title: 'Integrations' },
+    { category: 'utility', title: 'Utility' },
 ];
 
 function resolveIcon(name: string): LucideIcon {

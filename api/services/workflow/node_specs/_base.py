@@ -57,6 +57,10 @@ class NodeCategory(str, Enum):
     global_node = "global_node"
     trigger = "trigger"
     integration = "integration"
+    logic = "logic"
+    data = "data"
+    notification = "notification"
+    utility = "utility"
 
 
 class DisplayOptions(BaseModel):

@@ -30,6 +30,17 @@ class NodeType(str, Enum):
     trigger = "trigger"
     webhook = "webhook"
     qa = "qa"
+    # Logic
+    conditionNode = "conditionNode"
+    setVariableNode = "setVariableNode"
+    waitDelayNode = "waitDelayNode"
+    # Data
+    queryDataTableNode = "queryDataTableNode"
+    updateDataTableNode = "updateDataTableNode"
+    # Notification
+    alertTeamNode = "alertTeamNode"
+    # Utility
+    noteNode = "noteNode"
 
 
 class Position(BaseModel):
@@ -890,6 +901,343 @@ class QANodeData(BaseNodeData):
     qa_sample_rate: int = spec_field(default=100, ui_type=PropertyType.number)
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# Logic nodes
+# ─────────────────────────────────────────────────────────────────────────
+
+
+@node_spec(
+    name="conditionNode",
+    display_name="Condition",
+    description="Route the conversation to a different path based on a variable value or score.",
+    category=NodeCategory.logic,
+    icon="GitBranch",
+    examples=[
+        NodeExample(
+            name="score_gate",
+            data={
+                "name": "Lead Score Gate",
+                "field": "lead_score",
+                "operator": "gte",
+                "value": "70",
+            },
+        )
+    ],
+    property_order=("name", "field", "operator", "value"),
+)
+class ConditionNodeData(BaseNodeData):
+    field: str = spec_field(
+        ...,
+        ui_type=PropertyType.string,
+        display_name="Variable",
+        description="The extracted variable or context field to evaluate (e.g. lead_score, intent).",
+        required=True,
+        placeholder="lead_score",
+    )
+    operator: str = spec_field(
+        ...,
+        ui_type=PropertyType.options,
+        display_name="Operator",
+        description="How to compare the variable against the value.",
+        required=True,
+        options=[
+            PropertyOption(value="eq", label="equals"),
+            PropertyOption(value="neq", label="not equals"),
+            PropertyOption(value="gt", label="greater than"),
+            PropertyOption(value="gte", label="greater than or equal"),
+            PropertyOption(value="lt", label="less than"),
+            PropertyOption(value="lte", label="less than or equal"),
+            PropertyOption(value="contains", label="contains"),
+            PropertyOption(value="is_true", label="is true / yes"),
+            PropertyOption(value="is_false", label="is false / no"),
+        ],
+        spec_default="eq",
+    )
+    value: str = spec_field(
+        ...,
+        ui_type=PropertyType.string,
+        display_name="Value",
+        description="The value to compare against.",
+        required=True,
+        placeholder="70",
+    )
+
+
+@node_spec(
+    name="setVariableNode",
+    display_name="Set Variable",
+    description="Store a value into a named variable that later nodes and messages can reference.",
+    category=NodeCategory.logic,
+    icon="Variable",
+    examples=[
+        NodeExample(
+            name="flag_vip",
+            data={"name": "Flag VIP", "variable_name": "is_vip", "variable_value": "true"},
+        )
+    ],
+    property_order=("name", "variable_name", "variable_value"),
+)
+class SetVariableNodeData(BaseNodeData):
+    variable_name: str = spec_field(
+        ...,
+        ui_type=PropertyType.string,
+        display_name="Variable Name",
+        description="snake_case name for the variable (e.g. is_vip, lead_tier).",
+        required=True,
+        placeholder="lead_tier",
+    )
+    variable_value: str = spec_field(
+        ...,
+        ui_type=PropertyType.string,
+        display_name="Value",
+        description="The value to assign. Supports {{template_variables}} from context.",
+        required=True,
+        placeholder="HOT",
+    )
+
+
+@node_spec(
+    name="waitDelayNode",
+    display_name="Wait / Delay",
+    description="Pause execution for a set number of hours or days before continuing to the next step.",
+    category=NodeCategory.logic,
+    icon="Clock",
+    examples=[
+        NodeExample(
+            name="day_1_pause",
+            data={"name": "Wait 1 Day", "delay_unit": "days", "delay_amount": 1},
+        )
+    ],
+    property_order=("name", "delay_unit", "delay_amount"),
+)
+class WaitDelayNodeData(BaseNodeData):
+    delay_unit: str = spec_field(
+        ...,
+        ui_type=PropertyType.options,
+        display_name="Unit",
+        description="Unit of time for the delay.",
+        required=True,
+        options=[
+            PropertyOption(value="minutes", label="Minutes"),
+            PropertyOption(value="hours", label="Hours"),
+            PropertyOption(value="days", label="Days"),
+        ],
+        spec_default="hours",
+    )
+    delay_amount: int = spec_field(
+        ...,
+        ui_type=PropertyType.number,
+        display_name="Amount",
+        description="How many units to wait before proceeding.",
+        required=True,
+        min_value=1,
+        spec_default=24,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Data nodes
+# ─────────────────────────────────────────────────────────────────────────
+
+
+@node_spec(
+    name="queryDataTableNode",
+    display_name="Query Data Table",
+    description="Look up rows from a Data Table and store the result in a context variable for the AI to use.",
+    category=NodeCategory.data,
+    icon="TableProperties",
+    examples=[
+        NodeExample(
+            name="find_room",
+            data={
+                "name": "Find Available Room",
+                "table_name": "Rooms",
+                "filters": '[{"field":"type","op":"eq","value":"villa"},{"field":"available","op":"is_true"}]',
+                "store_as": "matched_rooms",
+                "limit": 3,
+            },
+        )
+    ],
+    property_order=("name", "table_name", "filters", "store_as", "limit"),
+)
+class QueryDataTableNodeData(BaseNodeData):
+    table_name: str = spec_field(
+        ...,
+        ui_type=PropertyType.string,
+        display_name="Table Name",
+        description="Name of the Data Table to query (must match exactly).",
+        required=True,
+        placeholder="Rooms",
+    )
+    filters: Optional[str] = spec_field(
+        default=None,
+        ui_type=PropertyType.json,
+        display_name="Filters (JSON)",
+        description='JSON array of filter conditions, e.g. [{"field":"type","op":"eq","value":"villa"}].',
+        editor="textarea",
+    )
+    store_as: str = spec_field(
+        ...,
+        ui_type=PropertyType.string,
+        display_name="Store Result As",
+        description="Variable name where matched rows are stored for downstream use.",
+        required=True,
+        placeholder="matched_rooms",
+    )
+    limit: int = spec_field(
+        default=5,
+        ui_type=PropertyType.number,
+        display_name="Max Rows",
+        description="Maximum number of rows to return.",
+        min_value=1,
+        max_value=50,
+        spec_default=5,
+    )
+
+
+@node_spec(
+    name="updateDataTableNode",
+    display_name="Update Data Table",
+    description="Write values back to a row in a Data Table (e.g. mark a room as booked).",
+    category=NodeCategory.data,
+    icon="TableProperties",
+    examples=[
+        NodeExample(
+            name="mark_booked",
+            data={
+                "name": "Mark Room Booked",
+                "table_name": "Rooms",
+                "row_id_variable": "selected_room_id",
+                "updates": '{"available":"false","booked_by":"{{caller_name}}"}',
+            },
+        )
+    ],
+    property_order=("name", "table_name", "row_id_variable", "updates"),
+)
+class UpdateDataTableNodeData(BaseNodeData):
+    table_name: str = spec_field(
+        ...,
+        ui_type=PropertyType.string,
+        display_name="Table Name",
+        description="Name of the Data Table to update.",
+        required=True,
+        placeholder="Rooms",
+    )
+    row_id_variable: str = spec_field(
+        ...,
+        ui_type=PropertyType.string,
+        display_name="Row ID Variable",
+        description="Context variable holding the row ID to update.",
+        required=True,
+        placeholder="selected_room_id",
+    )
+    updates: str = spec_field(
+        ...,
+        ui_type=PropertyType.json,
+        display_name="Fields to Update (JSON)",
+        description='JSON object of field → new value pairs. Supports {{template_variables}}.',
+        required=True,
+        editor="textarea",
+        placeholder='{"available": "false"}',
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Notification nodes
+# ─────────────────────────────────────────────────────────────────────────
+
+
+@node_spec(
+    name="alertTeamNode",
+    display_name="Alert Team",
+    description="Send a WhatsApp message or email to a staff member or manager at this point in the flow.",
+    category=NodeCategory.notification,
+    icon="Bell",
+    examples=[
+        NodeExample(
+            name="notify_manager",
+            data={
+                "name": "Notify Manager",
+                "channel": "whatsapp",
+                "recipient": "+919876543210",
+                "message": "New VIP lead: {{caller_name}} - Budget: {{budget}}",
+            },
+        )
+    ],
+    property_order=("name", "channel", "recipient", "message", "subject"),
+)
+class AlertTeamNodeData(BaseNodeData):
+    channel: str = spec_field(
+        ...,
+        ui_type=PropertyType.options,
+        display_name="Alert Channel",
+        description="How to send the alert to the team member.",
+        required=True,
+        options=[
+            PropertyOption(value="whatsapp", label="WhatsApp"),
+            PropertyOption(value="email", label="Email"),
+        ],
+        spec_default="whatsapp",
+    )
+    recipient: str = spec_field(
+        ...,
+        ui_type=PropertyType.string,
+        display_name="Recipient",
+        description="Phone number (WhatsApp) or email address of the team member to alert.",
+        required=True,
+        placeholder="+919876543210 or manager@yourco.com",
+    )
+    message: str = spec_field(
+        ...,
+        ui_type=PropertyType.mention_textarea,
+        display_name="Message",
+        description="Alert message body. Supports {{template_variables}} from conversation context.",
+        required=True,
+        placeholder="New lead: {{caller_name}} – Score: {{lead_score}}",
+        editor="textarea",
+    )
+    subject: Optional[str] = spec_field(
+        default=None,
+        ui_type=PropertyType.string,
+        display_name="Email Subject",
+        description="Subject line (email alerts only).",
+        display_options=DisplayOptions(show={"channel": ["email"]}),
+        placeholder="New lead from Lynq",
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Utility nodes
+# ─────────────────────────────────────────────────────────────────────────
+
+
+@node_spec(
+    name="noteNode",
+    display_name="Note",
+    description="A canvas annotation — not executed. Add context, instructions, or reminders for your team.",
+    category=NodeCategory.utility,
+    icon="StickyNote",
+    examples=[
+        NodeExample(
+            name="reminder",
+            data={"name": "Note", "content": "Remember to update room types each season."},
+        )
+    ],
+    property_order=("name", "content"),
+    graph_constraints=GraphConstraints(min_incoming=0, max_incoming=0, min_outgoing=0, max_outgoing=0),
+)
+class NoteNodeData(BaseNodeData):
+    content: str = spec_field(
+        ...,
+        ui_type=PropertyType.string,
+        display_name="Note Content",
+        description="Free-form text shown on the canvas card. Never executed.",
+        required=True,
+        editor="textarea",
+        placeholder="Add any notes about this workflow section here…",
+    )
+
+
 # Union of every per-type data class — useful as a type annotation on
 # consumers that handle any node data without dispatching on type. Cannot
 # be called as a constructor; use the per-type class directly.
@@ -901,6 +1249,13 @@ NodeDataDTO = Union[
     TriggerNodeData,
     WebhookNodeData,
     QANodeData,
+    ConditionNodeData,
+    SetVariableNodeData,
+    WaitDelayNodeData,
+    QueryDataTableNodeData,
+    UpdateDataTableNodeData,
+    AlertTeamNodeData,
+    NoteNodeData,
 ]
 
 
@@ -972,6 +1327,41 @@ class WebhookRFNode(_RFNodeBase):
 class QARFNode(_RFNodeBase):
     type: Literal["qa"] = "qa"
     data: QANodeData
+
+
+class ConditionRFNode(_RFNodeBase):
+    type: Literal["conditionNode"] = "conditionNode"
+    data: ConditionNodeData
+
+
+class SetVariableRFNode(_RFNodeBase):
+    type: Literal["setVariableNode"] = "setVariableNode"
+    data: SetVariableNodeData
+
+
+class WaitDelayRFNode(_RFNodeBase):
+    type: Literal["waitDelayNode"] = "waitDelayNode"
+    data: WaitDelayNodeData
+
+
+class QueryDataTableRFNode(_RFNodeBase):
+    type: Literal["queryDataTableNode"] = "queryDataTableNode"
+    data: QueryDataTableNodeData
+
+
+class UpdateDataTableRFNode(_RFNodeBase):
+    type: Literal["updateDataTableNode"] = "updateDataTableNode"
+    data: UpdateDataTableNodeData
+
+
+class AlertTeamRFNode(_RFNodeBase):
+    type: Literal["alertTeamNode"] = "alertTeamNode"
+    data: AlertTeamNodeData
+
+
+class NoteRFNode(_RFNodeBase):
+    type: Literal["noteNode"] = "noteNode"
+    data: NoteNodeData
 
 
 _PROMPT_REQUIRED_NODE_TYPES: dict[str, str] = {
@@ -1067,6 +1457,13 @@ _CORE_NODE_DATA_CLASSES: dict[str, type[BaseNodeData]] = {
     NodeType.trigger.value: TriggerNodeData,
     NodeType.webhook.value: WebhookNodeData,
     NodeType.qa.value: QANodeData,
+    NodeType.conditionNode.value: ConditionNodeData,
+    NodeType.setVariableNode.value: SetVariableNodeData,
+    NodeType.waitDelayNode.value: WaitDelayNodeData,
+    NodeType.queryDataTableNode.value: QueryDataTableNodeData,
+    NodeType.updateDataTableNode.value: UpdateDataTableNodeData,
+    NodeType.alertTeamNode.value: AlertTeamNodeData,
+    NodeType.noteNode.value: NoteNodeData,
 }
 
 
