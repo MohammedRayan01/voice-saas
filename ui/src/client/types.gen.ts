@@ -2134,7 +2134,7 @@ export type McpToolDefinition = {
  *
  * Drives grouping in the AddNodePanel UI.
  */
-export type NodeCategory = 'call_node' | 'global_node' | 'trigger' | 'integration';
+export type NodeCategory = 'call_node' | 'global_node' | 'trigger' | 'integration' | 'logic' | 'data' | 'notification' | 'utility';
 
 /**
  * NodeExample
