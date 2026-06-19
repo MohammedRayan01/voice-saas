@@ -150,6 +150,7 @@ class TextEngineClient(BaseDBClient):
         message: str,
         contact_id: int | None = None,
         system_prompt_override: str | None = None,
+        llm_cfg_override: dict | None = None,
     ) -> dict:
         """Run one AI reply turn.
 
@@ -157,7 +158,7 @@ class TextEngineClient(BaseDBClient):
             {"reply": str, "action": "reply"|"escalate"|"end", "tool_results": list}
         """
         system_prompt = system_prompt_override or await self._get_system_prompt(organization_id)
-        llm_cfg = await self._resolve_llm_config(organization_id)
+        llm_cfg = llm_cfg_override if llm_cfg_override is not None else await self._resolve_llm_config(organization_id)
         history = await self._load_history(organization_id, phone)
 
         history.append({"role": "user", "content": message})

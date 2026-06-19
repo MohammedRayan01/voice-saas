@@ -12,7 +12,7 @@ from loguru import logger
 from sqlalchemy import select, update
 
 from api.db.base_client import BaseDBClient
-from api.db.models import ContactModel, OrganizationConfigurationModel, WaConversationModel, WaMessageModel, WhatsAppConfigModel
+from api.db.models import ContactModel, OrganizationConfigurationModel, OrganizationMemberModel, WaConversationModel, WaMessageModel, WhatsAppConfigModel
 from api.enums import OrganizationConfigurationKey
 from api.services.whatsapp.automation_runner import run_automations
 
@@ -142,10 +142,30 @@ async def _maybe_run_workflow_reply(
         logger.warning(f"[webhook] invalid WHATSAPP_WORKFLOW_ID={workflow_id_str!r} for org={org_id}")
         return
 
-    system_prompt = await _extract_workflow_system_prompt(org_id, workflow_id)
+    system_prompt, model_overrides = await _extract_workflow_prompt_and_overrides(org_id, workflow_id)
 
+    from api.services.configuration.resolve import resolve_effective_config
     from api.services.workflow.text_engine import text_engine
     from api.services.whatsapp import meta_client
+
+    try:
+        from api.db import db_client as _wf_client
+        async with _db.async_session() as _s:
+            _r = await _s.execute(
+                select(OrganizationMemberModel.user_id).where(
+                    OrganizationMemberModel.organization_id == org_id
+                ).limit(1)
+            )
+            _uid = _r.scalar_one_or_none()
+        if _uid is not None:
+            user_config = await _wf_client.get_user_configurations(_uid)
+            effective_config = resolve_effective_config(user_config, model_overrides)
+            llm_cfg = effective_config.model_dump(exclude_none=True).get("llm", {}) or None
+        else:
+            llm_cfg = None
+    except Exception as exc:
+        logger.warning(f"[webhook] Could not resolve LLM config org={org_id}: {exc}")
+        llm_cfg = None
 
     try:
         result = await text_engine.run_turn(
@@ -154,6 +174,7 @@ async def _maybe_run_workflow_reply(
             message=message_text,
             contact_id=contact_id,
             system_prompt_override=system_prompt,
+            llm_cfg_override=llm_cfg,
         )
         reply = result.get("reply", "")
         if reply:
@@ -162,32 +183,34 @@ async def _maybe_run_workflow_reply(
         logger.error(f"[webhook] workflow AI reply failed org={org_id}: {exc}")
 
 
-async def _extract_workflow_system_prompt(org_id: int, workflow_id: int) -> str | None:
-    """Load the workflow and return the first agentNode's prompt, or None."""
+async def _extract_workflow_prompt_and_overrides(
+    org_id: int, workflow_id: int
+) -> tuple[str | None, dict | None]:
+    """Load the workflow and return (system_prompt, model_overrides)."""
     try:
         from api.db import db_client as _wf_client
         workflow = await _wf_client.get_workflow(workflow_id, organization_id=org_id)
         if not workflow:
-            return None
-        definition = getattr(workflow, "workflow_definition", None)
+            return None, None
+        released_def = getattr(workflow, "released_definition", None)
+        source = released_def
+        if not source:
+            return None, None
+        definition = getattr(source, "workflow_json", None)
+        workflow_configurations = getattr(source, "workflow_configurations", None)
+        model_overrides = (workflow_configurations or {}).get("model_overrides") if workflow_configurations else None
         if not definition:
-            current_def = getattr(workflow, "current_definition", None)
-            released_def = getattr(workflow, "released_definition", None)
-            source = current_def or released_def
-            if source:
-                definition = getattr(source, "workflow_json", None)
-        if not definition:
-            return None
+            return None, model_overrides
         for node in definition.get("nodes", []):
             node_type = node.get("type", "")
             if node_type in ("agentNode", "startCall", "globalNode"):
                 prompt = node.get("data", {}).get("prompt")
                 if prompt:
-                    return prompt
-        return None
+                    return prompt, model_overrides
+        return None, model_overrides
     except Exception as exc:
         logger.warning(f"[webhook] could not extract workflow prompt: {exc}")
-        return None
+        return None, None
 
 
 async def _upsert_contact(org_id: int, phone: str, name: str) -> int:

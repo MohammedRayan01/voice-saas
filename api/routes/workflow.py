@@ -899,14 +899,13 @@ async def test_workflow_whatsapp(
     if workflow is None:
         raise HTTPException(status_code=404, detail=f"Workflow {workflow_id} not found")
 
-    # Extract the system prompt from the workflow definition
-    definition = getattr(workflow, "workflow_definition", None)
-    if not definition:
-        draft = await db_client.get_draft_version(workflow_id)
-        released = workflow.released_definition
-        source = draft or released
-        if source:
-            definition = getattr(source, "workflow_json", None)
+    # Prefer draft over released for both definition and model_overrides
+    draft = await db_client.get_draft_version(workflow_id)
+    released = workflow.released_definition
+    source = draft or released
+
+    definition: dict | None = getattr(source, "workflow_json", None) if source else None
+    workflow_configurations: dict | None = getattr(source, "workflow_configurations", None) if source else None
 
     system_prompt: str | None = None
     if definition:
@@ -917,6 +916,14 @@ async def test_workflow_whatsapp(
                     system_prompt = prompt
                     break
 
+    # Resolve effective LLM config: global user config + workflow model_overrides
+    from api.services.configuration.resolve import resolve_effective_config
+
+    model_overrides = (workflow_configurations or {}).get("model_overrides") if workflow_configurations else None
+    user_config = await db_client.get_user_configurations(user.id)
+    effective_config = resolve_effective_config(user_config, model_overrides)
+    llm_cfg = effective_config.model_dump(exclude_none=True).get("llm", {})
+
     from api.services.workflow.text_engine import text_engine
 
     try:
@@ -925,6 +932,7 @@ async def test_workflow_whatsapp(
             phone=request.phone,
             message=request.message,
             system_prompt_override=system_prompt,
+            llm_cfg_override=llm_cfg if llm_cfg else None,
         )
     except Exception as exc:
         logger.error(f"WhatsApp test failed workflow={workflow_id}: {exc}")
