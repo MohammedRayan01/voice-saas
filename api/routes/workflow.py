@@ -877,6 +877,66 @@ async def publish_workflow(
     }
 
 
+class WhatsAppTestRequest(BaseModel):
+    phone: str = Field(..., description="Sender phone number (E.164 format, e.g. +919876543210)")
+    message: str = Field(..., description="Test message to send")
+
+
+@router.post("/{workflow_id}/test/whatsapp")
+async def test_workflow_whatsapp(
+    workflow_id: int,
+    request: WhatsAppTestRequest,
+    user: UserModel = Depends(get_user),
+) -> dict:
+    """Run one turn of the WhatsApp text engine using this workflow's agent prompt.
+
+    Useful for testing how the workflow AI responds before connecting it to a
+    live WhatsApp number via the WHATSAPP_WORKFLOW_ID configuration.
+    """
+    workflow = await db_client.get_workflow(
+        workflow_id, organization_id=user.selected_organization_id
+    )
+    if workflow is None:
+        raise HTTPException(status_code=404, detail=f"Workflow {workflow_id} not found")
+
+    # Extract the system prompt from the workflow definition
+    definition = getattr(workflow, "workflow_definition", None)
+    if not definition:
+        draft = await db_client.get_draft_version(workflow_id)
+        released = workflow.released_definition
+        source = draft or released
+        if source:
+            definition = getattr(source, "workflow_json", None)
+
+    system_prompt: str | None = None
+    if definition:
+        for node in definition.get("nodes", []):
+            if node.get("type") in ("agentNode", "startCall", "globalNode"):
+                prompt = node.get("data", {}).get("prompt")
+                if prompt:
+                    system_prompt = prompt
+                    break
+
+    from api.services.workflow.text_engine import text_engine
+
+    try:
+        result = await text_engine.run_turn(
+            organization_id=user.selected_organization_id,
+            phone=request.phone,
+            message=request.message,
+            system_prompt_override=system_prompt,
+        )
+    except Exception as exc:
+        logger.error(f"WhatsApp test failed workflow={workflow_id}: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return {
+        "reply": result.get("reply", ""),
+        "action": result.get("action", "reply"),
+        "tool_results": result.get("tool_results", []),
+    }
+
+
 @router.post("/{workflow_id}/create-draft")
 async def create_workflow_draft(
     workflow_id: int,

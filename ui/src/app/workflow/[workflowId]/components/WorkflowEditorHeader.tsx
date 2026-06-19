@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactFlowInstance } from "@xyflow/react";
-import { AlertCircle, ArrowLeft, ChevronDown, Clipboard, Copy, Download, Eye, HelpCircle, History, LoaderCircle, Menu, MoreVertical, Pencil, Phone, Rocket, X } from "lucide-react";
+import { AlertCircle, ArrowLeft, ChevronDown, Clipboard, Copy, Download, Eye, HelpCircle, History, LoaderCircle, Menu, MessageSquare, MoreVertical, Pencil, Phone, Rocket, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import { useRef, useState } from "react";
@@ -42,6 +42,7 @@ interface WorkflowEditorHeaderProps {
     saveWorkflow: (updateWorkflowDefinition?: boolean) => Promise<void>;
     user: { id: string; email?: string };
     onPhoneCallClick: () => void;
+    onWhatsAppClick: () => void;
     onHistoryClick: () => void;
     activeVersionLabel?: string;
     isViewingHistoricalVersion: boolean;
@@ -59,6 +60,7 @@ export const WorkflowEditorHeader = ({
     saveWorkflow,
     onRun,
     onPhoneCallClick,
+    onWhatsAppClick,
     onHistoryClick,
     activeVersionLabel,
     isViewingHistoricalVersion,
@@ -438,6 +440,15 @@ export const WorkflowEditorHeader = ({
                             >
                                 <Phone className="w-4 h-4 mr-2" />
                                 Phone Call
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    setTimeout(onWhatsAppClick, 0);
+                                }}
+                                className="text-white hover:bg-[#2a2a2a] cursor-pointer"
+                            >
+                                <MessageSquare className="w-4 h-4 mr-2 text-green-400" />
+                                WhatsApp
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>

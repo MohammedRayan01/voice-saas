@@ -7,14 +7,13 @@ Handles:
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
 
 from loguru import logger
 from sqlalchemy import select, update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from api.db.base_client import BaseDBClient
-from api.db.models import ContactModel, WaConversationModel, WaMessageModel, WhatsAppConfigModel
+from api.db.models import ContactModel, OrganizationConfigurationModel, WaConversationModel, WaMessageModel, WhatsAppConfigModel
+from api.enums import OrganizationConfigurationKey
 from api.services.whatsapp.automation_runner import run_automations
 
 _db = BaseDBClient()
@@ -112,6 +111,83 @@ async def _handle_message(org_id: int, msg: dict, contacts_map: dict) -> None:
             "sender_phone": sender_phone,
         },
     )
+
+    # If the org has a WhatsApp workflow configured and this is a text message,
+    # run the workflow-powered AI and send a reply.
+    if content_type == "text" and content_text:
+        await _maybe_run_workflow_reply(org_id, sender_phone, content_text, contact_id)
+
+
+async def _maybe_run_workflow_reply(
+    org_id: int, sender_phone: str, message_text: str, contact_id: int | None
+) -> None:
+    """If org has WHATSAPP_WORKFLOW_ID configured, run the workflow AI and send reply."""
+    async with _db.async_session() as s:
+        r = await s.execute(
+            select(OrganizationConfigurationModel).where(
+                OrganizationConfigurationModel.organization_id == org_id,
+                OrganizationConfigurationModel.key
+                == OrganizationConfigurationKey.WHATSAPP_WORKFLOW_ID.value,
+            )
+        )
+        cfg = r.scalar_one_or_none()
+
+    if not cfg or not cfg.value:
+        return
+
+    workflow_id_str = cfg.value
+    try:
+        workflow_id = int(workflow_id_str)
+    except (ValueError, TypeError):
+        logger.warning(f"[webhook] invalid WHATSAPP_WORKFLOW_ID={workflow_id_str!r} for org={org_id}")
+        return
+
+    system_prompt = await _extract_workflow_system_prompt(org_id, workflow_id)
+
+    from api.services.workflow.text_engine import text_engine
+    from api.services.whatsapp import meta_client
+
+    try:
+        result = await text_engine.run_turn(
+            organization_id=org_id,
+            phone=sender_phone,
+            message=message_text,
+            contact_id=contact_id,
+            system_prompt_override=system_prompt,
+        )
+        reply = result.get("reply", "")
+        if reply:
+            await meta_client.send_text(org_id, sender_phone, reply)
+    except Exception as exc:
+        logger.error(f"[webhook] workflow AI reply failed org={org_id}: {exc}")
+
+
+async def _extract_workflow_system_prompt(org_id: int, workflow_id: int) -> str | None:
+    """Load the workflow and return the first agentNode's prompt, or None."""
+    try:
+        from api.db import db_client as _wf_client
+        workflow = await _wf_client.get_workflow(workflow_id, organization_id=org_id)
+        if not workflow:
+            return None
+        definition = getattr(workflow, "workflow_definition", None)
+        if not definition:
+            current_def = getattr(workflow, "current_definition", None)
+            released_def = getattr(workflow, "released_definition", None)
+            source = current_def or released_def
+            if source:
+                definition = getattr(source, "workflow_json", None)
+        if not definition:
+            return None
+        for node in definition.get("nodes", []):
+            node_type = node.get("type", "")
+            if node_type in ("agentNode", "startCall", "globalNode"):
+                prompt = node.get("data", {}).get("prompt")
+                if prompt:
+                    return prompt
+        return None
+    except Exception as exc:
+        logger.warning(f"[webhook] could not extract workflow prompt: {exc}")
+        return None
 
 
 async def _upsert_contact(org_id: int, phone: str, name: str) -> int:

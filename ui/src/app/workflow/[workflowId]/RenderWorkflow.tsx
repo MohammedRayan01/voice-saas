@@ -22,6 +22,7 @@ import AddNodePanel from "../../../components/flow/AddNodePanel";
 import CustomEdge from "../../../components/flow/edges/CustomEdge";
 import { GenericNode } from "../../../components/flow/nodes/GenericNode";
 import { PhoneCallDialog } from './components/PhoneCallDialog';
+import { WhatsAppTestDialog } from './components/WhatsAppTestDialog';
 import { VersionHistoryPanel, WorkflowVersion } from './components/VersionHistoryPanel';
 import { WorkflowEditorHeader } from "./components/WorkflowEditorHeader";
 import { WorkflowProvider } from "./contexts/WorkflowContext";
@@ -58,6 +59,7 @@ function RenderWorkflow({ initialWorkflowName, workflowId, workflowUuid, initial
     const router = useRouter();
     const { specs } = useNodeSpecs();
     const [isPhoneCallDialogOpen, setIsPhoneCallDialogOpen] = useState(false);
+    const [isWhatsAppDialogOpen, setIsWhatsAppDialogOpen] = useState(false);
     const [isVersionPanelOpen, setIsVersionPanelOpen] = useState(false);
     const [versions, setVersions] = useState<WorkflowVersion[]>([]);
     const [versionsLoading, setVersionsLoading] = useState(false);
@@ -378,6 +380,7 @@ function RenderWorkflow({ initialWorkflowName, workflowId, workflowUuid, initial
                     saveWorkflow={guardedSaveWorkflow}
                     user={user}
                     onPhoneCallClick={() => setIsPhoneCallDialogOpen(true)}
+                    onWhatsAppClick={() => setIsWhatsAppDialogOpen(true)}
                     onHistoryClick={handleOpenVersionPanel}
                     activeVersionLabel={activeVersionLabel}
                     isViewingHistoricalVersion={isViewingHistoricalVersion}
@@ -565,6 +568,11 @@ function RenderWorkflow({ initialWorkflowName, workflowId, workflowUuid, initial
                     onOpenChange={setIsPhoneCallDialogOpen}
                     workflowId={workflowId}
                     user={user}
+                />
+                <WhatsAppTestDialog
+                    open={isWhatsAppDialogOpen}
+                    onOpenChange={setIsWhatsAppDialogOpen}
+                    workflowId={workflowId}
                 />
             </div>
         </WorkflowProvider>
