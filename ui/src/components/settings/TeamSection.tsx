@@ -27,8 +27,8 @@ type Role = "owner" | "admin" | "member" | "viewer";
 
 interface Member {
   id: number;
-  user_id: string;
-  invite_email: string | null;
+  user_id: number | null;
+  email: string | null;
   role: Role;
   accepted_at: string | null;
 }
@@ -64,6 +64,8 @@ export function TeamSection() {
   const [inviting, setInviting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -94,6 +96,8 @@ export function TeamSection() {
     setInviting(true);
     setError(null);
     setSuccess(null);
+    setInviteLink(null);
+    setCopied(false);
     try {
       const res = await fetch("/api/v1/organizations/members/invite", {
         method: "POST",
@@ -101,7 +105,9 @@ export function TeamSection() {
         body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
       });
       if (res.ok) {
-        setSuccess(`Invite sent to ${inviteEmail}`);
+        const data = await res.json();
+        setSuccess(`Invite created for ${inviteEmail} — share the link below with them.`);
+        setInviteLink(data.invite_link ?? null);
         setInviteEmail("");
         await fetchMembers();
       } else {
@@ -178,6 +184,22 @@ export function TeamSection() {
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           {success && <p className="text-sm text-emerald-600">{success}</p>}
+          {inviteLink && (
+            <div className="flex items-center gap-2">
+              <Input readOnly value={inviteLink} className="font-mono text-xs" onFocus={(e) => e.target.select()} />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(inviteLink);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+              >
+                {copied ? "Copied!" : "Copy"}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -206,10 +228,10 @@ export function TeamSection() {
                   <div key={m.id} className="flex items-center justify-between py-3 gap-3">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-primary text-xs font-semibold">
-                        {(m.invite_email ?? m.user_id ?? "?")[0]?.toUpperCase()}
+                        {(m.email ?? "?")[0]?.toUpperCase()}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{m.invite_email ?? m.user_id}</p>
+                        <p className="text-sm font-medium truncate">{m.email ?? `User #${m.user_id}`}</p>
                         {!m.accepted_at && (
                           <p className="text-xs text-amber-600">Pending invite</p>
                         )}

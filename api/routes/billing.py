@@ -62,6 +62,7 @@ class BillingStatusResponse(BaseModel):
     minutes_limit: Optional[int]
     seats_limit: Optional[int]
     trial_ends_at: Optional[str]
+    current_period_minutes: int = 0
     plans: dict
 
 
@@ -84,12 +85,20 @@ async def get_billing_status(user: UserModel = Depends(get_user)):
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
 
+    current_period_minutes = 0
+    try:
+        usage = await db_client.get_current_usage(user.selected_organization_id)
+        current_period_minutes = round((usage.get("total_duration_seconds") or 0) / 60)
+    except Exception as e:
+        logger.warning(f"Could not fetch usage for billing status: {e}")
+
     return BillingStatusResponse(
         plan=org.plan,
         subscription_status=org.subscription_status,
         minutes_limit=org.minutes_limit,
         seats_limit=org.seats_limit,
         trial_ends_at=org.trial_ends_at.isoformat() if org.trial_ends_at else None,
+        current_period_minutes=current_period_minutes,
         plans={k: PlanInfo(**{kk: vv for kk, vv in v.items() if kk != "razorpay_plan_id"}) for k, v in PLANS.items()},
     )
 
@@ -145,7 +154,10 @@ async def create_checkout(request: CheckoutRequest, user: UserModel = Depends(ge
             subscription_status="created",
         )
 
+        # short_url is Razorpay's hosted checkout page for the subscription —
+        # the frontend opens it directly instead of embedding Razorpay JS.
         return CheckoutResponse(
+            checkout_url=subscription.get("short_url"),
             razorpay_key_id=RAZORPAY_KEY_ID,
             subscription_id=subscription["id"],
         )

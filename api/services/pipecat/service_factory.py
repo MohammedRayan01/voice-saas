@@ -267,13 +267,20 @@ def create_tts_service(user_config, audio_config: "AudioConfig"):
     )
     # Create function call filter to prevent TTS from speaking function call tags
     xml_function_tag_filter = XMLFunctionTagFilter()
+    # silence_time_s: how long the TTS text aggregator waits (in seconds) for
+    # more LLM tokens before flushing the buffered text to the TTS API and
+    # starting audio synthesis. At 1.0s this was adding ~1.1-1.3s of silence
+    # between every sentence boundary (LLM pause + flush timeout + TTS round
+    # trip), producing the "picket fence" gap pattern heard mid-utterance.
+    # Lowered to 0.15s so the aggregator flushes almost immediately after each
+    # sentence, keeping the TTS pipeline fed without waiting a full second.
     if user_config.tts.provider == ServiceProviders.DEEPGRAM.value:
         return DeepgramTTSService(
             api_key=user_config.tts.api_key,
             settings=DeepgramTTSSettings(voice=user_config.tts.voice),
             text_filters=[xml_function_tag_filter],
             skip_aggregator_types=["recording_router", "recording"],
-            silence_time_s=1.0,
+            silence_time_s=0.15,
         )
     elif user_config.tts.provider == ServiceProviders.OPENAI.value:
         return OpenAITTSService(
@@ -281,7 +288,7 @@ def create_tts_service(user_config, audio_config: "AudioConfig"):
             settings=OpenAITTSSettings(model=user_config.tts.model),
             text_filters=[xml_function_tag_filter],
             skip_aggregator_types=["recording_router", "recording"],
-            silence_time_s=1.0,
+            silence_time_s=0.15,
         )
     elif user_config.tts.provider == ServiceProviders.ELEVENLABS.value:
         # Backward compatible with older configuration "Name - voice_id"
@@ -296,7 +303,7 @@ def create_tts_service(user_config, audio_config: "AudioConfig"):
             "http://", "ws://"
         )
         return ElevenLabsTTSService(
-            reconnect_on_error=False,
+            reconnect_on_error=True,
             api_key=user_config.tts.api_key,
             url=elevenlabs_url,
             settings=ElevenLabsTTSSettings(
@@ -308,7 +315,7 @@ def create_tts_service(user_config, audio_config: "AudioConfig"):
             ),
             text_filters=[xml_function_tag_filter],
             skip_aggregator_types=["recording_router", "recording"],
-            silence_time_s=1.0,
+            silence_time_s=0.15,
         )
     elif user_config.tts.provider == ServiceProviders.CARTESIA.value:
         speed = getattr(user_config.tts, "speed", None)
@@ -334,7 +341,7 @@ def create_tts_service(user_config, audio_config: "AudioConfig"):
             ),
             text_filters=[xml_function_tag_filter],
             skip_aggregator_types=["recording_router", "recording"],
-            silence_time_s=1.0,
+            silence_time_s=0.15,
         )
     elif user_config.tts.provider == ServiceProviders.DOGRAH.value:
         # Convert HTTP URL to WebSocket URL for TTS
@@ -349,7 +356,7 @@ def create_tts_service(user_config, audio_config: "AudioConfig"):
             ),
             text_filters=[xml_function_tag_filter],
             skip_aggregator_types=["recording_router", "recording"],
-            silence_time_s=1.0,
+            silence_time_s=0.15,
         )
     elif user_config.tts.provider == ServiceProviders.CAMB.value:
         from pipecat.services.camb.tts import CambTTSService
@@ -377,7 +384,7 @@ def create_tts_service(user_config, audio_config: "AudioConfig"):
             ),
             text_filters=[xml_function_tag_filter],
             skip_aggregator_types=["recording_router", "recording"],
-            silence_time_s=1.0,
+            silence_time_s=0.15,
         )
     elif user_config.tts.provider == ServiceProviders.RIME.value:
         speed = getattr(user_config.tts, "speed", None)
@@ -402,7 +409,7 @@ def create_tts_service(user_config, audio_config: "AudioConfig"):
             settings=RimeTTSSettings(**settings_kwargs),
             text_filters=[xml_function_tag_filter],
             skip_aggregator_types=["recording_router", "recording"],
-            silence_time_s=1.0,
+            silence_time_s=0.15,
         )
     elif user_config.tts.provider == ServiceProviders.SARVAM.value:
         # Map Sarvam language code to pipecat Language enum for TTS
@@ -432,7 +439,7 @@ def create_tts_service(user_config, audio_config: "AudioConfig"):
             ),
             text_filters=[xml_function_tag_filter],
             skip_aggregator_types=["recording_router", "recording"],
-            silence_time_s=1.0,
+            silence_time_s=0.15,
         )
     else:
         raise HTTPException(

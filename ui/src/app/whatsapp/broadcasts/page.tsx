@@ -40,14 +40,13 @@ interface Broadcast {
     id: number;
     name: string;
     template_name?: string;
-    message?: string;
-    language?: string;
+    template_language?: string;
     status: 'draft' | 'sending' | 'sent' | 'failed';
-    recipient_count: number;
+    total_recipients: number;
     sent_count: number;
     failed_count?: number;
     created_at: string;
-    sent_at: string | null;
+    updated_at: string | null;
 }
 
 const STATUS_CONFIG = {
@@ -103,11 +102,18 @@ export default function BroadcastsPage() {
         setSaving(true);
         try {
             const phones = form.phone_numbers.split(',').map(p => p.trim()).filter(Boolean);
+            const h = await headers();
             const r = await fetch(`${API}/api/v1/whatsapp/broadcasts`, {
-                method: 'POST', headers: await headers(),
-                body: JSON.stringify({ name: form.name, template_name: form.template_name, language: form.language, phone_numbers: phones }),
+                method: 'POST', headers: h,
+                body: JSON.stringify({ name: form.name, template_name: form.template_name, template_language: form.language, phone_numbers: phones }),
             });
-            if (r.ok) { setDialogOpen(false); hasFetched.current = false; fetchBroadcasts(); }
+            if (r.ok) {
+                const created: Broadcast = await r.json();
+                await fetch(`${API}/api/v1/whatsapp/broadcasts/${created.id}/send`, { method: 'POST', headers: h });
+                setDialogOpen(false);
+                hasFetched.current = false;
+                fetchBroadcasts();
+            }
         } catch (e) { logger.error(`${e}`); }
         setSaving(false);
     }
@@ -115,8 +121,8 @@ export default function BroadcastsPage() {
     async function deleteBroadcast(id: number) {
         if (!confirm('Delete this broadcast?')) return;
         try {
-            await fetch(`${API}/api/v1/whatsapp/broadcasts/${id}`, { method: 'DELETE', headers: await headers() });
-            setBroadcasts(p => p.filter(b => b.id !== id));
+            const r = await fetch(`${API}/api/v1/whatsapp/broadcasts/${id}`, { method: 'DELETE', headers: await headers() });
+            if (r.ok) setBroadcasts(p => p.filter(b => b.id !== id));
         } catch (e) { logger.error(`${e}`); }
     }
 
@@ -149,7 +155,7 @@ export default function BroadcastsPage() {
                         {broadcasts.map(b => {
                             const cfg = STATUS_CONFIG[b.status] ?? STATUS_CONFIG.draft;
                             const { Icon } = cfg;
-                            const pct = b.recipient_count > 0 ? Math.round((b.sent_count / b.recipient_count) * 100) : 0;
+                            const pct = b.total_recipients > 0 ? Math.round((b.sent_count / b.total_recipients) * 100) : 0;
                             return (
                                 <div key={b.id} className="rounded-xl border border-slate-800 bg-slate-900 p-4 group">
                                     <div className="flex items-start justify-between gap-4">
@@ -164,16 +170,15 @@ export default function BroadcastsPage() {
                                             {b.template_name && (
                                                 <p className="text-xs text-slate-500 mb-1">
                                                     Template: <span className="font-mono text-slate-400">{b.template_name}</span>
-                                                    {b.language && ` · ${b.language}`}
+                                                    {b.template_language && ` · ${b.template_language}`}
                                                 </p>
                                             )}
-                                            {b.message && <p className="text-sm text-slate-400 line-clamp-2">{b.message}</p>}
 
-                                            {b.recipient_count > 0 && (
+                                            {b.total_recipients > 0 && (
                                                 <div className="mt-3">
                                                     <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
                                                         <span>
-                                                            {b.sent_count}/{b.recipient_count} sent
+                                                            {b.sent_count}/{b.total_recipients} sent
                                                             {(b.failed_count ?? 0) > 0 && <span className="text-red-400 ml-1">· {b.failed_count} failed</span>}
                                                         </span>
                                                         <span>{pct}%</span>
@@ -185,7 +190,7 @@ export default function BroadcastsPage() {
                                             )}
 
                                             <p className="text-xs text-slate-600 mt-2">
-                                                {b.sent_at ? `Sent ${format(new Date(b.sent_at), 'MMM d, yyyy HH:mm')}` : `Created ${format(new Date(b.created_at), 'MMM d, yyyy')}`}
+                                                {b.status === 'sent' && b.updated_at ? `Sent ${format(new Date(b.updated_at), 'MMM d, yyyy HH:mm')}` : `Created ${format(new Date(b.created_at), 'MMM d, yyyy')}`}
                                             </p>
                                         </div>
 

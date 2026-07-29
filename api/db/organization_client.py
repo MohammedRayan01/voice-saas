@@ -172,7 +172,8 @@ class OrganizationClient(BaseDBClient):
         invite_token: str,
     ) -> OrganizationMemberModel:
         async with self.async_session() as session:
-            # Check if a user with this email already exists
+            # If the invitee already has an account, link the row to them now;
+            # otherwise leave user_id NULL until the invite is accepted.
             user_result = await session.execute(
                 select(UserModel).where(UserModel.email == invite_email)
             )
@@ -180,7 +181,7 @@ class OrganizationClient(BaseDBClient):
 
             member = OrganizationMemberModel(
                 organization_id=organization_id,
-                user_id=existing_user.id if existing_user else invited_by_user_id,
+                user_id=existing_user.id if existing_user else None,
                 role=role,
                 invited_by_user_id=invited_by_user_id,
                 invite_email=invite_email,
@@ -211,6 +212,23 @@ class OrganizationClient(BaseDBClient):
             member = result.scalars().first()
             if not member:
                 return None
+
+            # If the accepting user is already a member of this org, keep the
+            # existing membership and consume the invite instead of violating
+            # uq_org_members_org_user.
+            existing_result = await session.execute(
+                select(OrganizationMemberModel).where(
+                    OrganizationMemberModel.organization_id == member.organization_id,
+                    OrganizationMemberModel.user_id == user_id,
+                    OrganizationMemberModel.id != member.id,
+                )
+            )
+            existing = existing_result.scalars().first()
+            if existing:
+                await session.delete(member)
+                await session.commit()
+                return existing
+
             member.user_id = user_id
             member.accepted_at = datetime.now(timezone.utc)
             member.invite_token = None
@@ -219,7 +237,7 @@ class OrganizationClient(BaseDBClient):
             return member
 
     async def update_organization_member_role(
-        self, organization_id: int, user_id: int, role: str
+        self, organization_id: int, member_id: int, role: str
     ) -> Optional[OrganizationMemberModel]:
         async with self.async_session() as session:
             result = await session.execute(
@@ -227,7 +245,7 @@ class OrganizationClient(BaseDBClient):
                 .options(selectinload(OrganizationMemberModel.user))
                 .where(
                     OrganizationMemberModel.organization_id == organization_id,
-                    OrganizationMemberModel.user_id == user_id,
+                    OrganizationMemberModel.id == member_id,
                 )
             )
             member = result.scalars().first()
@@ -239,13 +257,13 @@ class OrganizationClient(BaseDBClient):
             return member
 
     async def delete_organization_member(
-        self, organization_id: int, user_id: int
+        self, organization_id: int, member_id: int
     ) -> bool:
         async with self.async_session() as session:
             result = await session.execute(
                 select(OrganizationMemberModel).where(
                     OrganizationMemberModel.organization_id == organization_id,
-                    OrganizationMemberModel.user_id == user_id,
+                    OrganizationMemberModel.id == member_id,
                 )
             )
             member = result.scalars().first()

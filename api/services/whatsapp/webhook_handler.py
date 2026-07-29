@@ -144,28 +144,10 @@ async def _maybe_run_workflow_reply(
 
     system_prompt, model_overrides = await _extract_workflow_prompt_and_overrides(org_id, workflow_id)
 
-    from api.services.configuration.resolve import resolve_effective_config
+    llm_cfg = await _resolve_whatsapp_llm_config(org_id, model_overrides)
+
     from api.services.workflow.text_engine import text_engine
     from api.services.whatsapp import meta_client
-
-    try:
-        from api.db import db_client as _wf_client
-        async with _db.async_session() as _s:
-            _r = await _s.execute(
-                select(OrganizationMemberModel.user_id).where(
-                    OrganizationMemberModel.organization_id == org_id
-                ).limit(1)
-            )
-            _uid = _r.scalar_one_or_none()
-        if _uid is not None:
-            user_config = await _wf_client.get_user_configurations(_uid)
-            effective_config = resolve_effective_config(user_config, model_overrides)
-            llm_cfg = effective_config.model_dump(exclude_none=True).get("llm", {}) or None
-        else:
-            llm_cfg = None
-    except Exception as exc:
-        logger.warning(f"[webhook] Could not resolve LLM config org={org_id}: {exc}")
-        llm_cfg = None
 
     try:
         result = await text_engine.run_turn(
@@ -181,6 +163,50 @@ async def _maybe_run_workflow_reply(
             await meta_client.send_text(org_id, sender_phone, reply)
     except Exception as exc:
         logger.error(f"[webhook] workflow AI reply failed org={org_id}: {exc}")
+
+
+async def _resolve_whatsapp_llm_config(org_id: int, model_overrides: dict | None) -> dict | None:
+    """Resolve the LLM config used to generate WhatsApp AI replies.
+
+    Prefers the org's dedicated WHATSAPP_MODEL_CONFIG (set via the WhatsApp
+    Settings > AI Agent tab) — when present, it's authoritative and no
+    workflow-level model_overrides are layered on top, since the user
+    explicitly chose this model for WhatsApp. Falls back to the pre-existing
+    behavior (the first org member's global "Models" config + this workflow's
+    model_overrides) for orgs that haven't configured a WhatsApp-specific model.
+    """
+    async with _db.async_session() as s:
+        r = await s.execute(
+            select(OrganizationConfigurationModel).where(
+                OrganizationConfigurationModel.organization_id == org_id,
+                OrganizationConfigurationModel.key
+                == OrganizationConfigurationKey.WHATSAPP_MODEL_CONFIG.value,
+            )
+        )
+        cfg = r.scalar_one_or_none()
+
+    if cfg and cfg.value and cfg.value.get("provider"):
+        return cfg.value
+
+    from api.services.configuration.resolve import resolve_effective_config
+
+    try:
+        from api.db import db_client as _wf_client
+        async with _db.async_session() as _s:
+            _r = await _s.execute(
+                select(OrganizationMemberModel.user_id).where(
+                    OrganizationMemberModel.organization_id == org_id
+                ).limit(1)
+            )
+            _uid = _r.scalar_one_or_none()
+        if _uid is None:
+            return None
+        user_config = await _wf_client.get_user_configurations(_uid)
+        effective_config = resolve_effective_config(user_config, model_overrides)
+        return effective_config.model_dump(exclude_none=True).get("llm", {}) or None
+    except Exception as exc:
+        logger.warning(f"[webhook] Could not resolve LLM config org={org_id}: {exc}")
+        return None
 
 
 async def _extract_workflow_prompt_and_overrides(

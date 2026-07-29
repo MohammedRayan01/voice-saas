@@ -916,13 +916,13 @@ async def test_workflow_whatsapp(
                     system_prompt = prompt
                     break
 
-    # Resolve effective LLM config: global user config + workflow model_overrides
-    from api.services.configuration.resolve import resolve_effective_config
+    # Resolve effective LLM config: WhatsApp-specific model config (if set via
+    # WhatsApp Settings > AI Agent) takes priority, else global user config +
+    # workflow model_overrides — same precedence used by the live webhook path.
+    from api.services.whatsapp.webhook_handler import _resolve_whatsapp_llm_config
 
     model_overrides = (workflow_configurations or {}).get("model_overrides") if workflow_configurations else None
-    user_config = await db_client.get_user_configurations(user.id)
-    effective_config = resolve_effective_config(user_config, model_overrides)
-    llm_cfg = effective_config.model_dump(exclude_none=True).get("llm", {})
+    llm_cfg = await _resolve_whatsapp_llm_config(user.selected_organization_id, model_overrides)
 
     from api.services.workflow.text_engine import text_engine
 

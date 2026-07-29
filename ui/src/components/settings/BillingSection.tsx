@@ -97,10 +97,10 @@ export function BillingSection() {
         body: JSON.stringify({ plan: planId }),
       });
       const data = await res.json();
-      if (data.payment_link) {
-        window.open(data.payment_link, "_blank");
+      if (res.ok && data.checkout_url) {
+        window.open(data.checkout_url, "_blank");
       } else {
-        alert(data.detail ?? "Razorpay not configured yet");
+        alert(data.detail ?? "Payment gateway not configured yet");
       }
     } catch {
       // silent

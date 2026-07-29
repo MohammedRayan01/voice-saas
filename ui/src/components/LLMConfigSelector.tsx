@@ -35,6 +35,10 @@ interface LLMConfigSelectorProps {
     onModelChange: (model: string) => void;
     apiKey: string;
     onApiKeyChange: (apiKey: string) => void;
+    /** Restrict the Provider dropdown to this subset (e.g. providers a
+     * particular caller can actually use). Omit to show every registered
+     * provider (default, unchanged behavior for existing callers). */
+    allowedProviders?: string[];
 }
 
 export function LLMConfigSelector({
@@ -44,6 +48,7 @@ export function LLMConfigSelector({
     onModelChange,
     apiKey,
     onApiKeyChange,
+    allowedProviders,
 }: LLMConfigSelectorProps) {
     const [schemas, setSchemas] = useState<Record<string, ProviderSchema>>({});
     const [isManualModelInput, setIsManualModelInput] = useState(false);
@@ -59,7 +64,9 @@ export function LLMConfigSelector({
         fetchSchemas();
     }, []);
 
-    const availableProviders = Object.keys(schemas);
+    const availableProviders = allowedProviders
+        ? Object.keys(schemas).filter((p) => allowedProviders.includes(p))
+        : Object.keys(schemas);
     const providerSchema = schemas[provider];
 
     const getModelOptions = (): string[] => {

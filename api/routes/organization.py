@@ -1,3 +1,4 @@
+import os
 import secrets
 from typing import List, Literal, Optional
 
@@ -847,7 +848,7 @@ ROLE_RANK = {"owner": 4, "admin": 3, "member": 2, "viewer": 1}
 
 class MemberResponse(BaseModel):
     id: int
-    user_id: int
+    user_id: Optional[int]
     email: Optional[str]
     role: str
     accepted_at: Optional[str]
@@ -857,6 +858,12 @@ class MemberResponse(BaseModel):
 class InviteRequest(BaseModel):
     email: EmailStr
     role: MemberRole = "member"
+
+
+class InviteResponse(MemberResponse):
+    # Until transactional email lands, the admin shares this link manually;
+    # the invitee opens it after signing in to join the organization.
+    invite_link: str
 
 
 class UpdateRoleRequest(BaseModel):
@@ -887,7 +894,7 @@ async def list_members(user: UserModel = Depends(get_user)):
     return [_member_to_response(m) for m in members]
 
 
-@router.post("/members/invite", response_model=MemberResponse)
+@router.post("/members/invite", response_model=InviteResponse)
 async def invite_member(request: InviteRequest, user: UserModel = Depends(get_user)):
     if not user.selected_organization_id:
         raise HTTPException(status_code=400, detail="No organization selected")
@@ -906,12 +913,16 @@ async def invite_member(request: InviteRequest, user: UserModel = Depends(get_us
         invited_by_user_id=user.id,
         invite_token=token,
     )
-    return _member_to_response(member)
+    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+    return InviteResponse(
+        **_member_to_response(member).model_dump(),
+        invite_link=f"{frontend_url}/accept-invite?token={token}",
+    )
 
 
-@router.patch("/members/{member_user_id}", response_model=MemberResponse)
+@router.patch("/members/{member_id}", response_model=MemberResponse)
 async def update_member_role(
-    member_user_id: int,
+    member_id: int,
     request: UpdateRoleRequest,
     user: UserModel = Depends(get_user),
 ):
@@ -924,12 +935,12 @@ async def update_member_role(
     caller_role = caller_member.role if caller_member else "owner"
     _require_role(caller_role, "admin")
 
-    if member_user_id == user.id:
+    if caller_member and member_id == caller_member.id:
         raise HTTPException(status_code=400, detail="Cannot change your own role")
 
     member = await db_client.update_organization_member_role(
         organization_id=user.selected_organization_id,
-        user_id=member_user_id,
+        member_id=member_id,
         role=request.role,
     )
     if not member:
@@ -937,8 +948,8 @@ async def update_member_role(
     return _member_to_response(member)
 
 
-@router.delete("/members/{member_user_id}")
-async def remove_member(member_user_id: int, user: UserModel = Depends(get_user)):
+@router.delete("/members/{member_id}")
+async def remove_member(member_id: int, user: UserModel = Depends(get_user)):
     if not user.selected_organization_id:
         raise HTTPException(status_code=400, detail="No organization selected")
 
@@ -948,12 +959,12 @@ async def remove_member(member_user_id: int, user: UserModel = Depends(get_user)
     caller_role = caller_member.role if caller_member else "owner"
     _require_role(caller_role, "admin")
 
-    if member_user_id == user.id:
+    if caller_member and member_id == caller_member.id:
         raise HTTPException(status_code=400, detail="Cannot remove yourself")
 
     deleted = await db_client.delete_organization_member(
         organization_id=user.selected_organization_id,
-        user_id=member_user_id,
+        member_id=member_id,
     )
     if not deleted:
         raise HTTPException(status_code=404, detail="Member not found")

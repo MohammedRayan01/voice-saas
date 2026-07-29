@@ -1,6 +1,7 @@
-"""Execute integrations (QA analysis, webhooks) after workflow run completion."""
+"""Execute integrations (QA analysis, webhooks, alerts, delays) after workflow run completion."""
 
 import random
+from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, Optional
 
 import httpx
@@ -20,8 +21,12 @@ from api.services.integrations import (
 )
 from api.services.pipecat.tracing_config import register_org_langfuse_credentials
 from api.services.workflow.dto import (
+    AlertTeamNodeData,
+    AlertTeamRFNode,
     QANodeData,
     QARFNode,
+    WaitDelayNodeData,
+    WaitDelayRFNode,
     WebhookNodeData,
     WebhookRFNode,
 )
@@ -218,6 +223,8 @@ async def run_integrations_post_workflow_run(_ctx, workflow_run_id: int):
         nodes = workflow_definition.get("nodes", [])
         qa_nodes = [n for n in nodes if n.get("type") == "qa"]
         webhook_nodes = [n for n in nodes if n.get("type") == "webhook"]
+        alert_team_nodes = [n for n in nodes if n.get("type") == "alertTeamNode"]
+        wait_delay_nodes = [n for n in nodes if n.get("type") == "waitDelayNode"]
         has_registered_integrations = has_completion_handlers(workflow_definition)
 
         # Step 4: Generate a public access token for any run that needs post-call work.
@@ -225,6 +232,8 @@ async def run_integrations_post_workflow_run(_ctx, workflow_run_id: int):
         if (
             not webhook_nodes
             and not qa_nodes
+            and not alert_team_nodes
+            and not wait_delay_nodes
             and not has_registered_integrations
             and not has_campaign
         ):
@@ -291,17 +300,43 @@ async def run_integrations_post_workflow_run(_ctx, workflow_run_id: int):
                 workflow_run_id
             )
 
-        # Step 7: Execute webhooks
+        # Step 7: Resolve waitDelay nodes and store defer timestamps in annotations.
+        # The campaign orchestrator reads these to know when to schedule the next step.
+        # waitDelay is a no-op for standalone (non-campaign) workflow runs.
+        if wait_delay_nodes:
+            logger.info(f"Found {len(wait_delay_nodes)} waitDelay nodes to resolve")
+            delay_specs = _resolve_wait_delay_nodes(wait_delay_nodes)
+            if delay_specs:
+                await db_client.update_workflow_run(
+                    workflow_run_id,
+                    annotations={"wait_delays": delay_specs},
+                )
+                workflow_run, _ = await db_client.get_workflow_run_with_context(
+                    workflow_run_id
+                )
+
+        # Step 8: Build render context (includes annotations from QA, integrations, delays)
+        render_context = _build_render_context(workflow_run, public_token)
+
+        # Step 9: Execute alertTeam nodes with the full post-call render context.
+        # This covers text/chat workflows where alertTeam fires post-run.
+        # In voice workflows the pipecat_engine fires alerts during the call instead.
+        if alert_team_nodes:
+            logger.info(f"Found {len(alert_team_nodes)} alertTeam nodes to execute")
+            await _execute_alert_team_nodes(
+                alert_nodes=alert_team_nodes,
+                render_context=render_context,
+                organization_id=organization_id,
+            )
+
+        # Step 10: Execute webhooks
         if not webhook_nodes:
             logger.debug("No webhook nodes in workflow")
             return
 
         logger.info(f"Found {len(webhook_nodes)} webhook nodes to execute")
 
-        # Step 8: Build render context (includes annotations from QA and integrations)
-        render_context = _build_render_context(workflow_run, public_token)
-
-        # Step 9: Execute each webhook node
+        # Step 11: Execute each webhook node
         for node in webhook_nodes:
             node_id = node.get("id", "unknown")
             try:
@@ -459,3 +494,124 @@ async def _execute_webhook_node(
     except Exception as e:
         logger.error(f"Webhook '{webhook_name}' unexpected error: {e}")
         return False
+
+
+async def _execute_alert_team_nodes(
+    alert_nodes: list[dict],
+    render_context: Dict[str, Any],
+    organization_id: int,
+) -> None:
+    """Execute all alertTeamNode entries after a workflow run completes.
+
+    Post-call alertTeam nodes are executed here (rather than during the voice
+    call in pipecat_engine.py) when the node appears in a text/chat workflow or
+    after a voice call where the alert should fire once the full context —
+    including QA annotations and recording URLs — is available in the render
+    context.
+
+    For voice-call workflows the during-call handler in pipecat_engine.py fires
+    the alert mid-call instead; this function handles the same node type in the
+    post-call integration pipeline.
+
+    Rendering uses ``render_template`` (same as webhook nodes) so all fields in
+    ``render_context`` (gathered_context, initial_context, annotations, URLs,
+    etc.) are available as ``{{template_variables}}``.
+
+    Dispatches via ``node_executors.send_alert`` which calls:
+      - WhatsApp: ``services/whatsapp/meta_client.send_text()``
+      - Email:    ``services/whatsapp/automation_runner._send_alert_email()``
+    """
+    from api.services.workflow.node_executors import send_alert
+
+    for node in alert_nodes:
+        node_id = node.get("id", "unknown")
+        try:
+            alert_node = AlertTeamRFNode.model_validate(node)
+        except Exception as e:
+            logger.warning(f"AlertTeam node #{node_id} failed validation, skipping: {e}")
+            continue
+
+        data: AlertTeamNodeData = alert_node.data
+        rendered_message = render_template(data.message, render_context)
+        rendered_recipient = render_template(data.recipient, render_context)
+        rendered_subject = (
+            render_template(data.subject, render_context) if data.subject else None
+        )
+
+        logger.info(
+            f"Executing alertTeam node '{data.name}' (#{node_id}): "
+            f"{data.channel} → {rendered_recipient}"
+        )
+        try:
+            await send_alert(
+                org_id=organization_id,
+                channel=data.channel,
+                recipient=rendered_recipient,
+                message=rendered_message,
+                subject=rendered_subject,
+            )
+        except Exception as e:
+            logger.warning(
+                f"AlertTeam node '{data.name}' (#{node_id}) failed: {e}"
+            )
+
+
+def _resolve_wait_delay_nodes(
+    wait_nodes: list[dict],
+) -> list[Dict[str, Any]]:
+    """Calculate the ``defer_until`` timestamp for each waitDelayNode.
+
+    waitDelayNode is a campaign-sequencing primitive — it tells the campaign
+    runner "do not trigger the next step until N minutes/hours/days have
+    passed".  The actual re-scheduling is handled by the campaign orchestrator
+    which reads these annotations and enqueues the next step at the right time.
+
+    This function resolves the delay into an absolute ISO-8601 timestamp and
+    returns the list of delay specs so they can be stored in
+    ``workflow_run.annotations["wait_delays"]``.
+
+    Supported ``delay_unit`` values: ``"minutes"`` / ``"hours"`` / ``"days"``.
+    """
+    results = []
+    now = datetime.now(UTC)
+
+    for node in wait_nodes:
+        node_id = node.get("id", "unknown")
+        try:
+            wait_node = WaitDelayRFNode.model_validate(node)
+        except Exception as e:
+            logger.warning(f"WaitDelay node #{node_id} failed validation, skipping: {e}")
+            continue
+
+        data: WaitDelayNodeData = wait_node.data
+        amount = data.delay_amount
+        unit = data.delay_unit
+
+        if unit == "minutes":
+            delta = timedelta(minutes=amount)
+        elif unit == "hours":
+            delta = timedelta(hours=amount)
+        elif unit == "days":
+            delta = timedelta(days=amount)
+        else:
+            logger.warning(
+                f"WaitDelay node '{data.name}' (#{node_id}): unknown unit '{unit}', skipping"
+            )
+            continue
+
+        defer_until = (now + delta).isoformat()
+        logger.info(
+            f"WaitDelay node '{data.name}' (#{node_id}): "
+            f"defer_until={defer_until} ({amount} {unit})"
+        )
+        results.append(
+            {
+                "node_id": node_id,
+                "node_name": data.name,
+                "delay_amount": amount,
+                "delay_unit": unit,
+                "defer_until": defer_until,
+            }
+        )
+
+    return results

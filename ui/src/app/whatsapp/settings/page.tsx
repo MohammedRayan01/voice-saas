@@ -3,10 +3,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Copy, ExternalLink } from 'lucide-react';
 
+import { getWorkflowsSummaryApiV1WorkflowSummaryGet } from '@/client/sdk.gen';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { LLMConfigSelector } from '@/components/LLMConfigSelector';
 import PackGallery, { type PackMeta } from '@/components/whatsapp/PackGallery';
 import IndustryPackWizard from '@/components/whatsapp/IndustryPackWizard';
 import { useAuth } from '@/lib/auth';
@@ -14,7 +23,27 @@ import logger from '@/lib/logger';
 
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL ?? '';
 
-type Tab = 'connection' | 'packs';
+// Providers the WhatsApp text engine can actually talk to (OpenAI-compatible
+// clients only — aws_bedrock needs a separate boto3 client, so it's excluded).
+const WHATSAPP_LLM_PROVIDERS = ['openai', 'google', 'groq', 'openrouter', 'azure', 'dograh', 'speaches'];
+
+type Tab = 'connection' | 'ai' | 'packs';
+
+interface WorkflowSummary {
+    id: number;
+    name: string;
+}
+
+interface WhatsAppAIConfig {
+    workflow_id: number | null;
+    llm: {
+        provider: string;
+        model: string;
+        api_key?: string | null;
+        base_url?: string | null;
+        endpoint?: string | null;
+    } | null;
+}
 
 interface WaConfig {
     phone_number_id: string;
@@ -48,13 +77,101 @@ export default function WhatsAppSettingsPage() {
     const [wizardOpen, setWizardOpen] = useState(false);
     const [galleryRefreshKey, setGalleryRefreshKey] = useState(0);
 
+    // AI Agent tab state
+    const [workflows, setWorkflows] = useState<WorkflowSummary[]>([]);
+    const [aiLoading, setAiLoading] = useState(true);
+    const [aiSaving, setAiSaving] = useState(false);
+    const [aiSaved, setAiSaved] = useState(false);
+    const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>('none');
+    const [llmProvider, setLlmProvider] = useState('');
+    const [llmModel, setLlmModel] = useState('');
+    const [llmApiKey, setLlmApiKey] = useState('');
+    const [llmBaseUrl, setLlmBaseUrl] = useState('');
+    const [llmEndpoint, setLlmEndpoint] = useState('');
+
     useEffect(() => {
         if (!user || hasFetched.current) return;
         hasFetched.current = true;
         const base = API_BASE || window.location.origin;
         setWebhookUrl(`${base}/api/v1/whatsapp/webhook`);
         fetchConfig();
+        fetchWorkflows();
+        fetchAIConfig();
     }, [user]);
+
+    const fetchWorkflows = async () => {
+        if (!user) return;
+        try {
+            const token = await getAccessToken();
+            const response = await getWorkflowsSummaryApiV1WorkflowSummaryGet({
+                headers: { Authorization: `Bearer ${token}` },
+                query: { status: 'active' },
+            });
+            if (response.data) setWorkflows(response.data as WorkflowSummary[]);
+        } catch (e) {
+            logger.error(`Failed to fetch workflows: ${e}`);
+        }
+    };
+
+    const fetchAIConfig = async () => {
+        if (!user) return;
+        try {
+            const token = await getAccessToken();
+            const res = await fetch(`${API_BASE}/api/v1/whatsapp/ai-config`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+                const data: WhatsAppAIConfig = await res.json();
+                setSelectedWorkflowId(data.workflow_id != null ? String(data.workflow_id) : 'none');
+                if (data.llm) {
+                    setLlmProvider(data.llm.provider ?? '');
+                    setLlmModel(data.llm.model ?? '');
+                    setLlmApiKey(data.llm.api_key ?? '');
+                    setLlmBaseUrl(data.llm.base_url ?? '');
+                    setLlmEndpoint(data.llm.endpoint ?? '');
+                }
+            }
+        } catch (e) {
+            logger.error(`Failed to fetch WhatsApp AI config: ${e}`);
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
+    const handleSaveAIConfig = async () => {
+        if (!user) return;
+        setAiSaving(true);
+        try {
+            const token = await getAccessToken();
+            const res = await fetch(`${API_BASE}/api/v1/whatsapp/ai-config`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    workflow_id: selectedWorkflowId === 'none' ? null : Number(selectedWorkflowId),
+                    llm: llmProvider
+                        ? {
+                              provider: llmProvider,
+                              model: llmModel,
+                              api_key: llmApiKey || null,
+                              base_url: llmBaseUrl || null,
+                              endpoint: llmEndpoint || null,
+                          }
+                        : null,
+                }),
+            });
+            if (res.ok) {
+                setAiSaved(true);
+                setTimeout(() => setAiSaved(false), 3000);
+            }
+        } catch (e) {
+            logger.error(`Failed to save WhatsApp AI config: ${e}`);
+        } finally {
+            setAiSaving(false);
+        }
+    };
 
     const fetchConfig = async () => {
         if (!user) return;
@@ -148,7 +265,7 @@ export default function WhatsAppSettingsPage() {
 
             {/* Tab bar */}
             <div className="flex gap-1 border-b">
-                {(['connection', 'packs'] as Tab[]).map((tab) => (
+                {(['connection', 'ai', 'packs'] as Tab[]).map((tab) => (
                     <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
@@ -158,7 +275,7 @@ export default function WhatsAppSettingsPage() {
                                 : 'border-transparent text-muted-foreground hover:text-foreground'
                         }`}
                     >
-                        {tab === 'connection' ? 'Connection' : 'Industry Packs'}
+                        {tab === 'connection' ? 'Connection' : tab === 'ai' ? 'AI Agent' : 'Industry Packs'}
                     </button>
                 ))}
             </div>
@@ -246,6 +363,99 @@ export default function WhatsAppSettingsPage() {
                                         Saved
                                     </>
                                 ) : saving ? (
+                                    'Saving...'
+                                ) : (
+                                    'Save Configuration'
+                                )}
+                            </Button>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
+
+            {/* AI Agent Tab */}
+            {activeTab === 'ai' && !aiLoading && (
+                <div className="space-y-6">
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-base">Connected Agent</CardTitle>
+                            <CardDescription>
+                                Pick which of your voice agents replies to WhatsApp messages. Its prompt, tools, and
+                                knowledge base are used to generate replies.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="wa-agent">Agent</Label>
+                                <Select value={selectedWorkflowId} onValueChange={setSelectedWorkflowId}>
+                                    <SelectTrigger id="wa-agent">
+                                        <SelectValue placeholder="Select an agent" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">None (automations only)</SelectItem>
+                                        {workflows.map((wf) => (
+                                            <SelectItem key={wf.id} value={String(wf.id)}>
+                                                {wf.name} (#{wf.id})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-xs text-muted-foreground">
+                                    Only the published version of this agent is used — publish after edits for
+                                    changes to take effect on WhatsApp.
+                                </p>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-base">AI Model</CardTitle>
+                            <CardDescription>
+                                The LLM that generates WhatsApp replies. Separate from the model used by your voice
+                                agents on calls.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <LLMConfigSelector
+                                provider={llmProvider}
+                                onProviderChange={setLlmProvider}
+                                model={llmModel}
+                                onModelChange={setLlmModel}
+                                apiKey={llmApiKey}
+                                onApiKeyChange={setLlmApiKey}
+                                allowedProviders={WHATSAPP_LLM_PROVIDERS}
+                            />
+                            {(llmProvider === 'openrouter' || llmProvider === 'speaches') && (
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="wa-base-url">Base URL</Label>
+                                    <Input
+                                        id="wa-base-url"
+                                        placeholder="https://openrouter.ai/api/v1"
+                                        value={llmBaseUrl}
+                                        onChange={(e) => setLlmBaseUrl(e.target.value)}
+                                    />
+                                </div>
+                            )}
+                            {llmProvider === 'azure' && (
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="wa-endpoint">Azure Endpoint</Label>
+                                    <Input
+                                        id="wa-endpoint"
+                                        placeholder="https://your-resource.openai.azure.com"
+                                        value={llmEndpoint}
+                                        onChange={(e) => setLlmEndpoint(e.target.value)}
+                                    />
+                                </div>
+                            )}
+
+                            <Button onClick={handleSaveAIConfig} disabled={aiSaving} className="gap-2">
+                                {aiSaved ? (
+                                    <>
+                                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                        Saved
+                                    </>
+                                ) : aiSaving ? (
                                     'Saving...'
                                 ) : (
                                     'Save Configuration'

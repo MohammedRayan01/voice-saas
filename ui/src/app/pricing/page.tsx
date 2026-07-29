@@ -24,6 +24,7 @@ import {
   Key,
   Info,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -765,6 +766,7 @@ const FEATURE_GROUPS: FeatureGroup[] = [
 
 /* ─── Page ───────────────────────────────────────────────── */
 export default function PricingPage() {
+  const router = useRouter();
   const [billing, setBilling] = useState<BillingCycle>("monthly");
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(
     Object.fromEntries(FEATURE_GROUPS.map((g) => [g.title, true]))
@@ -913,6 +915,11 @@ export default function PricingPage() {
                   )}
                   variant={plan.highlight ? "default" : "outline"}
                   size="lg"
+                  onClick={() =>
+                    plan.cta === "Talk to us"
+                      ? (window.location.href = "mailto:mohammedrayan@naazailabs.com?subject=Lynq%20Sales%20Manager%20plan")
+                      : router.push("/auth/login")
+                  }
                 >
                   {plan.cta}
                 </Button>

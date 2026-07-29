@@ -19,6 +19,7 @@ from api.db import db_client
 from api.enums import ToolCategory
 from api.services.pipecat.audio_playback import play_audio
 from api.services.workflow.disposition_mapper import apply_disposition_mapping
+from api.services.workflow.dto import NodeType
 from api.services.workflow.workflow_graph import Node, WorkflowGraph
 
 if TYPE_CHECKING:
@@ -598,7 +599,22 @@ class PipecatEngine:
         # Handle end nodes
         elif node.is_end:
             await self._handle_end_node(node)
-        # Handle normal agent nodes
+        # Evaluate a field/operator/value condition and branch without LLM
+        elif node.node_type == NodeType.conditionNode.value:
+            await self._handle_condition_node(node)
+        # Write a named variable into gathered context, then auto-advance
+        elif node.node_type == NodeType.setVariableNode.value:
+            await self._handle_set_variable_node(node)
+        # Query a Data Table and store results in context, then auto-advance
+        elif node.node_type == NodeType.queryDataTableNode.value:
+            await self._handle_query_data_table_node(node)
+        # Write updates back to a Data Table row, then auto-advance
+        elif node.node_type == NodeType.updateDataTableNode.value:
+            await self._handle_update_data_table_node(node)
+        # Fire a WhatsApp or email alert and auto-advance (non-blocking)
+        elif node.node_type == NodeType.alertTeamNode.value:
+            await self._handle_alert_team_node(node)
+        # Handle all other conversational agent nodes via LLM
         else:
             await self._handle_agent_node(node)
 
@@ -653,6 +669,284 @@ class PipecatEngine:
         """Handle agent node execution."""
         # Setup LLM context with prompts and functions.
         await self._setup_llm_context(node)
+
+    # -------------------------------------------------------------------------
+    # Non-LLM node handlers
+    #
+    # These nodes execute deterministic logic (condition check, variable write,
+    # DB query/update, notification) and immediately advance to the next node
+    # without starting an LLM turn.  They follow the same pattern:
+    #   1. Read node.data (the typed DTO bound at WorkflowGraph construction).
+    #   2. Perform the side-effect (evaluate / write / query / send).
+    #   3. Call set_node(next_id) on the first outgoing edge, or log a warning
+    #      when the node has no outgoing edge (design error — caught by the
+    #      graph validator's min_outgoing constraint).
+    #
+    # DO NOT call _setup_llm_context() here — these nodes are pass-through
+    # steps in the graph; they have no prompt and must not push a new LLM turn.
+    # -------------------------------------------------------------------------
+
+    async def _handle_condition_node(self, node: Node) -> None:
+        """Evaluate a field/operator/value condition and branch deterministically.
+
+        Reads ``field``, ``operator``, and ``value`` from the node data, resolves
+        the field from ``_gathered_context["extracted_variables"]`` (set by the LLM
+        extraction pass or earlier setVariable nodes), and selects the outgoing edge
+        whose label matches the result:
+
+          - True  branch → edge labelled "true" / "yes" / "pass" (first edge as fallback)
+          - False branch → edge labelled "false" / "no" / "fail" (second edge as fallback)
+
+        No LLM turn is started; the transition is instant.
+
+        This mirrors the ``condition`` step handler in
+        ``services/whatsapp/automation_runner.py`` adapted for the voice call
+        gathered-context layout.
+        """
+        from api.services.workflow.dto import ConditionNodeData
+        from api.services.workflow.node_executors import evaluate_condition, pick_condition_edge
+
+        data: ConditionNodeData = node.data
+        passed = evaluate_condition(
+            field=data.field,
+            operator=data.operator,
+            value=data.value,
+            context=self._gathered_context,
+        )
+        logger.debug(
+            f"[conditionNode] '{node.name}': "
+            f"'{data.field}' {data.operator} '{data.value}' → {passed}"
+        )
+
+        next_node_id = pick_condition_edge(node.out_edges, passed)
+        if next_node_id:
+            await self.set_node(next_node_id)
+        else:
+            logger.warning(
+                f"[conditionNode] '{node.name}' has no outgoing edges — call may stall"
+            )
+
+    async def _handle_set_variable_node(self, node: Node) -> None:
+        """Store a rendered value into gathered context under a named key.
+
+        Reads ``variable_name`` and ``variable_value`` from the node data.
+        The value is rendered via ``_format_prompt`` so it supports
+        ``{{template_variable}}`` substitution from the current call context,
+        exactly like edge transition speeches and node prompts.
+
+        Result is written to ``_gathered_context["extracted_variables"][variable_name]``
+        so subsequent nodes — whether LLM-prompted (via prompt template vars) or
+        conditionNode checks — can access it immediately.
+
+        Automatically transitions to the single outgoing edge after writing.
+        """
+        from api.services.workflow.dto import SetVariableNodeData
+
+        data: SetVariableNodeData = node.data
+        rendered_value = self._format_prompt(data.variable_value)
+
+        extracted = self._gathered_context.setdefault("extracted_variables", {})
+        extracted[data.variable_name] = rendered_value
+        logger.debug(
+            f"[setVariableNode] '{node.name}': "
+            f"set '{data.variable_name}' = '{rendered_value}'"
+        )
+
+        if node.out_edges:
+            await self.set_node(node.out_edges[0].target)
+        else:
+            logger.warning(
+                f"[setVariableNode] '{node.name}' has no outgoing edge"
+            )
+
+    async def _handle_query_data_table_node(self, node: Node) -> None:
+        """Query a Data Table and store matching rows in gathered context.
+
+        Reads ``table_name``, ``filters`` (JSON array), ``store_as``, and
+        ``limit`` from the node data.  Filter values support
+        ``{{template_variable}}`` substitution (resolved before querying).
+
+        Query result — a list of row dicts each containing an ``"id"`` key —
+        is written to ``_gathered_context["extracted_variables"][store_as]``.
+        Downstream LLM nodes can reference the rows via ``{{store_as}}`` in
+        their prompts, and updateDataTableNode can read the row ID back.
+
+        If the table does not exist or returns no rows, an empty list is stored
+        so the variable is always present for downstream conditions.
+
+        Automatically transitions to the single outgoing edge after the query.
+
+        Implementation delegates to ``node_executors.query_data_table`` which
+        applies filters in-memory via the same ``_row_matches_filters`` helper
+        used by the Data Tables REST API (``routes/data_tables.py``).
+        """
+        import json as _json
+
+        from api.services.workflow.dto import QueryDataTableNodeData
+        from api.services.workflow.node_executors import query_data_table
+
+        data: QueryDataTableNodeData = node.data
+        org_id = await self._get_organization_id()
+
+        if not org_id:
+            logger.warning(
+                f"[queryDataTable] '{node.name}' could not resolve org_id — skipping query"
+            )
+        else:
+            try:
+                raw_filters = _json.loads(data.filters) if data.filters else []
+            except _json.JSONDecodeError:
+                logger.warning(
+                    f"[queryDataTable] '{node.name}' invalid filters JSON — using no filters"
+                )
+                raw_filters = []
+
+            rows = await query_data_table(
+                org_id=org_id,
+                table_name=data.table_name,
+                filters=raw_filters,
+                limit=data.limit,
+            )
+            extracted = self._gathered_context.setdefault("extracted_variables", {})
+            extracted[data.store_as] = rows
+            logger.debug(
+                f"[queryDataTable] '{node.name}': "
+                f"stored {len(rows)} rows in '{data.store_as}'"
+            )
+
+        if node.out_edges:
+            await self.set_node(node.out_edges[0].target)
+        else:
+            logger.warning(
+                f"[queryDataTable] '{node.name}' has no outgoing edge"
+            )
+
+    async def _handle_update_data_table_node(self, node: Node) -> None:
+        """Write field updates back to a Data Table row.
+
+        Reads ``table_name``, ``row_id_variable`` (name of the context variable
+        holding the row primary key), and ``updates`` (JSON object) from the
+        node data.
+
+        Row ID resolution order:
+          1. ``_gathered_context["extracted_variables"][row_id_variable]``
+          2. ``_gathered_context[row_id_variable]``  (top-level fallback)
+
+        Update field values support ``{{template_variable}}`` substitution via
+        ``_format_prompt``, allowing e.g. ``{"booked_by": "{{caller_name}}"}``
+        to be resolved at runtime.
+
+        Org ownership is validated inside ``node_executors.update_data_table_row``
+        by joining through the table's ``organization_id`` — the row ID alone is
+        not sufficient proof of ownership (security requirement from AGENTS.md).
+
+        Automatically transitions to the single outgoing edge after the write.
+        """
+        import json
+
+        from api.services.workflow.dto import UpdateDataTableNodeData
+        from api.services.workflow.node_executors import update_data_table_row
+
+        data: UpdateDataTableNodeData = node.data
+        org_id = await self._get_organization_id()
+
+        if not org_id:
+            logger.warning(
+                f"[updateDataTable] '{node.name}' could not resolve org_id — skipping update"
+            )
+        else:
+            extracted = self._gathered_context.get("extracted_variables", {})
+            row_id_raw = extracted.get(data.row_id_variable) or self._gathered_context.get(
+                data.row_id_variable
+            )
+
+            if row_id_raw is None:
+                logger.warning(
+                    f"[updateDataTable] '{node.name}': row_id_variable "
+                    f"'{data.row_id_variable}' not found in context — skipping update"
+                )
+            else:
+                try:
+                    row_id = int(row_id_raw)
+                    raw_updates = json.loads(data.updates)
+                    rendered_updates = {
+                        k: self._format_prompt(str(v)) for k, v in raw_updates.items()
+                    }
+                    await update_data_table_row(
+                        org_id=org_id,
+                        table_name=data.table_name,
+                        row_id=row_id,
+                        updates=rendered_updates,
+                    )
+                    logger.debug(
+                        f"[updateDataTable] '{node.name}': updated row {row_id} "
+                        f"in '{data.table_name}' fields={list(rendered_updates.keys())}"
+                    )
+                except (ValueError, json.JSONDecodeError) as exc:
+                    logger.warning(
+                        f"[updateDataTable] '{node.name}' failed: {exc}"
+                    )
+
+        if node.out_edges:
+            await self.set_node(node.out_edges[0].target)
+        else:
+            logger.warning(
+                f"[updateDataTable] '{node.name}' has no outgoing edge"
+            )
+
+    async def _handle_alert_team_node(self, node: Node) -> None:
+        """Fire a WhatsApp or email alert and immediately advance to the next node.
+
+        Reads ``channel``, ``recipient``, ``message``, and optionally ``subject``
+        from the node data.  All string fields are rendered via ``_format_prompt``
+        so ``{{template_variable}}`` substitution works the same way as in node
+        prompts and edge transition speeches.
+
+        The alert is dispatched as a background asyncio task so it does **not**
+        block the voice pipeline — the call continues to the next node instantly
+        while the HTTP request to WhatsApp / Resend happens concurrently.
+
+        Dispatches via ``node_executors.send_alert`` which in turn calls:
+          - WhatsApp: ``services/whatsapp/meta_client.send_text()``
+          - Email:    ``services/whatsapp/automation_runner._send_alert_email()``
+        """
+        from api.services.workflow.dto import AlertTeamNodeData
+        from api.services.workflow.node_executors import send_alert
+
+        data: AlertTeamNodeData = node.data
+        org_id = await self._get_organization_id()
+
+        if not org_id:
+            logger.warning(
+                f"[alertTeam] '{node.name}' could not resolve org_id — skipping alert"
+            )
+        else:
+            rendered_message = self._format_prompt(data.message)
+            rendered_recipient = self._format_prompt(data.recipient)
+            rendered_subject = (
+                self._format_prompt(data.subject) if data.subject else None
+            )
+            # Fire-and-forget: does not block the voice pipeline
+            asyncio.create_task(
+                send_alert(
+                    org_id=org_id,
+                    channel=data.channel,
+                    recipient=rendered_recipient,
+                    message=rendered_message,
+                    subject=rendered_subject,
+                )
+            )
+            logger.debug(
+                f"[alertTeam] '{node.name}': firing {data.channel} alert "
+                f"to {rendered_recipient}"
+            )
+
+        if node.out_edges:
+            await self.set_node(node.out_edges[0].target)
+        else:
+            logger.warning(
+                f"[alertTeam] '{node.name}' has no outgoing edge"
+            )
 
     async def end_call_with_reason(
         self,

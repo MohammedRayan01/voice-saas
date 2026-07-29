@@ -26,7 +26,9 @@ from api.db.models import (
     PipelineStageModel,
     DealModel,
 )
+from api.enums import OrganizationConfigurationKey
 from api.services.auth.depends import get_user
+from api.services.configuration.masking import is_mask_of, mask_key
 from api.services.whatsapp import meta_client
 from api.services.whatsapp.webhook_handler import handle_webhook_payload
 
@@ -143,6 +145,117 @@ async def disconnect_whatsapp(user: UserModel = Depends(get_user)):
         )
         await s.commit()
     return {"disconnected": True}
+
+
+# ── WhatsApp AI Configuration (agent + model) ──────────────────────────────────
+# Controls which workflow's persona replies on WhatsApp (WHATSAPP_WORKFLOW_ID)
+# and which LLM generates those replies (WHATSAPP_MODEL_CONFIG). Both are read
+# by services/whatsapp/webhook_handler.py::_maybe_run_workflow_reply.
+
+class WhatsAppLLMConfig(BaseModel):
+    provider: str
+    model: str
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    endpoint: Optional[str] = None
+
+
+class WhatsAppAIConfigRequest(BaseModel):
+    workflow_id: Optional[int] = None
+    llm: Optional[WhatsAppLLMConfig] = None
+
+
+class WhatsAppAIConfigResponse(BaseModel):
+    workflow_id: Optional[int] = None
+    llm: Optional[WhatsAppLLMConfig] = None
+
+
+@router.get("/ai-config", response_model=WhatsAppAIConfigResponse)
+async def get_whatsapp_ai_config(user: UserModel = Depends(get_user)):
+    org_id = user.selected_organization_id
+    workflow_cfg = await db_client.get_configuration(
+        org_id, OrganizationConfigurationKey.WHATSAPP_WORKFLOW_ID.value
+    )
+    model_cfg = await db_client.get_configuration(
+        org_id, OrganizationConfigurationKey.WHATSAPP_MODEL_CONFIG.value
+    )
+
+    workflow_id = None
+    if workflow_cfg and workflow_cfg.value:
+        try:
+            workflow_id = int(workflow_cfg.value)
+        except (ValueError, TypeError):
+            workflow_id = None
+
+    llm = None
+    if model_cfg and model_cfg.value and model_cfg.value.get("provider"):
+        llm = WhatsAppLLMConfig(
+            provider=model_cfg.value.get("provider", ""),
+            model=model_cfg.value.get("model", ""),
+            api_key=mask_key(model_cfg.value.get("api_key", "")) if model_cfg.value.get("api_key") else None,
+            base_url=model_cfg.value.get("base_url"),
+            endpoint=model_cfg.value.get("endpoint"),
+        )
+
+    return WhatsAppAIConfigResponse(workflow_id=workflow_id, llm=llm)
+
+
+@router.post("/ai-config", response_model=WhatsAppAIConfigResponse)
+async def save_whatsapp_ai_config(
+    body: WhatsAppAIConfigRequest, user: UserModel = Depends(get_user)
+):
+    org_id = user.selected_organization_id
+
+    if body.workflow_id is not None:
+        workflow = await db_client.get_workflow(body.workflow_id, organization_id=org_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+
+    if body.workflow_id is not None:
+        await db_client.upsert_configuration(
+            org_id,
+            OrganizationConfigurationKey.WHATSAPP_WORKFLOW_ID.value,
+            str(body.workflow_id),
+        )
+    else:
+        await db_client.delete_configuration(
+            org_id, OrganizationConfigurationKey.WHATSAPP_WORKFLOW_ID.value
+        )
+
+    if body.llm is not None:
+        existing_model_cfg = await db_client.get_configuration(
+            org_id, OrganizationConfigurationKey.WHATSAPP_MODEL_CONFIG.value
+        )
+        existing_api_key = (
+            existing_model_cfg.value.get("api_key", "")
+            if existing_model_cfg and existing_model_cfg.value
+            else ""
+        )
+
+        incoming_api_key = body.llm.api_key or ""
+        api_key = (
+            existing_api_key
+            if incoming_api_key and is_mask_of(incoming_api_key, existing_api_key)
+            else incoming_api_key
+        )
+
+        await db_client.upsert_configuration(
+            org_id,
+            OrganizationConfigurationKey.WHATSAPP_MODEL_CONFIG.value,
+            {
+                "provider": body.llm.provider,
+                "model": body.llm.model,
+                "api_key": api_key,
+                "base_url": body.llm.base_url,
+                "endpoint": body.llm.endpoint,
+            },
+        )
+    else:
+        await db_client.delete_configuration(
+            org_id, OrganizationConfigurationKey.WHATSAPP_MODEL_CONFIG.value
+        )
+
+    return await get_whatsapp_ai_config(user)
 
 
 # ── Conversations / Inbox ──────────────────────────────────────────────────────
@@ -483,6 +596,7 @@ class BroadcastCreate(BaseModel):
     template_language: str = "en_US"
     template_variables: Optional[dict] = None
     audience_filter: Optional[dict] = None
+    phone_numbers: Optional[List[str]] = None
     scheduled_at: Optional[datetime] = None
 
 
@@ -490,6 +604,7 @@ class BroadcastResponse(BaseModel):
     id: int
     name: str
     template_name: str
+    template_language: str
     status: str
     total_recipients: int
     sent_count: int
@@ -497,6 +612,7 @@ class BroadcastResponse(BaseModel):
     read_count: int
     failed_count: int
     created_at: Optional[datetime]
+    updated_at: Optional[datetime]
 
     class Config:
         from_attributes = True
@@ -517,6 +633,12 @@ async def list_broadcasts(user: UserModel = Depends(get_user)):
 @router.post("/broadcasts", response_model=BroadcastResponse)
 async def create_broadcast(body: BroadcastCreate, user: UserModel = Depends(get_user)):
     org_id = user.selected_organization_id
+    # An explicit phone-number list is the simplest audience; store it inside
+    # audience_filter so _execute_broadcast has a single place to resolve
+    # recipients from.
+    audience_filter = dict(body.audience_filter or {})
+    if body.phone_numbers:
+        audience_filter["phone_numbers"] = body.phone_numbers
     async with _db.async_session() as s:
         b = WaBroadcastModel(
             organization_id=org_id,
@@ -524,7 +646,7 @@ async def create_broadcast(body: BroadcastCreate, user: UserModel = Depends(get_
             template_name=body.template_name,
             template_language=body.template_language,
             template_variables=body.template_variables,
-            audience_filter=body.audience_filter,
+            audience_filter=audience_filter or None,
             scheduled_at=body.scheduled_at,
             status="draft",
         )
@@ -532,6 +654,26 @@ async def create_broadcast(body: BroadcastCreate, user: UserModel = Depends(get_
         await s.commit()
         await s.refresh(b)
         return b
+
+
+@router.delete("/broadcasts/{broadcast_id}")
+async def delete_broadcast(broadcast_id: int, user: UserModel = Depends(get_user)):
+    org_id = user.selected_organization_id
+    async with _db.async_session() as s:
+        r = await s.execute(
+            select(WaBroadcastModel).where(
+                WaBroadcastModel.id == broadcast_id,
+                WaBroadcastModel.organization_id == org_id,
+            )
+        )
+        b = r.scalar_one_or_none()
+        if not b:
+            raise HTTPException(status_code=404)
+        if b.status == "sending":
+            raise HTTPException(status_code=400, detail="Cannot delete a broadcast while it is sending")
+        await s.delete(b)
+        await s.commit()
+    return {"deleted": True}
 
 
 @router.post("/broadcasts/{broadcast_id}/send")
@@ -571,24 +713,47 @@ async def _execute_broadcast(broadcast_id: int, org_id: int) -> None:
         if not b:
             return
 
-        # Get contacts based on audience_filter (or all)
-        q = select(ContactModel).where(ContactModel.organization_id == org_id)
-        contacts = (await s.execute(q)).scalars().all()
+        # Resolve recipients from audience_filter. An explicit phone_numbers
+        # list wins; a tags filter narrows contacts; otherwise all org
+        # contacts with a phone number are targeted.
+        audience = b.audience_filter or {}
+        if audience.get("phone_numbers"):
+            recipients = [p for p in audience["phone_numbers"] if p]
+        else:
+            q = select(ContactModel).where(ContactModel.organization_id == org_id)
+            contacts = (await s.execute(q)).scalars().all()
+            wanted_tags = set(audience.get("tags") or [])
+            if wanted_tags:
+                contacts = [c for c in contacts if wanted_tags & set(c.tags or [])]
+            recipients = [c.phone for c in contacts if c.phone]
+
+        # Meta expects template variables as body-component parameters, in
+        # template placeholder order ({{1}}, {{2}}, ...).
+        components = None
+        if b.template_variables:
+            components = [
+                {
+                    "type": "body",
+                    "parameters": [
+                        {"type": "text", "text": str(v)}
+                        for v in b.template_variables.values()
+                    ],
+                }
+            ]
 
         sent = failed = 0
-        for contact in contacts:
-            if not contact.phone:
-                continue
+        for phone in recipients:
             try:
                 await meta_client.send_template(
                     org_id,
-                    contact.phone,
+                    phone,
                     b.template_name,
                     b.template_language,
+                    components=components,
                 )
                 sent += 1
             except Exception as exc:
-                logger.warning(f"[broadcast] failed for {contact.phone}: {exc}")
+                logger.warning(f"[broadcast] failed for {phone}: {exc}")
                 failed += 1
 
         await s.execute(

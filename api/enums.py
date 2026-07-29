@@ -104,6 +104,9 @@ class OrganizationConfigurationKey(Enum):
     WHATSAPP_WORKFLOW_ID = (
         "WHATSAPP_WORKFLOW_ID"  # ID of the workflow to use for WhatsApp AI replies
     )
+    WHATSAPP_MODEL_CONFIG = (
+        "WHATSAPP_MODEL_CONFIG"  # LLM provider/model/api_key used specifically for WhatsApp AI replies
+    )
     INDUSTRY_TYPE = (
         "INDUSTRY_TYPE"  # Industry pack type: "resort" | "real_estate" | "hr" | "law_firm"
     )

@@ -24,6 +24,7 @@ from openai import AsyncOpenAI
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from api.constants import MPS_API_URL
 from api.db.base_client import BaseDBClient
 from api.db.models import ChatSessionModel, OrganizationConfigurationModel, OrganizationMemberModel
 from api.enums import OrganizationConfigurationKey
@@ -38,11 +39,15 @@ _DEFAULT_SYSTEM_PROMPT = (
     "respond helpfully then end your reply with the single word ESCALATE on its own line."
 )
 
-# Provider → OpenAI-compatible base_url map (empty = use OpenAI default)
+# Provider → OpenAI-compatible base_url map (empty = use OpenAI default).
+# aws_bedrock is intentionally excluded: it needs a separate (boto3) client,
+# not an OpenAI-compatible one, so it's not usable by this text engine.
 _PROVIDER_BASE_URLS: dict[str, str] = {
     "google": "https://generativelanguage.googleapis.com/v1beta/openai/",
     "openrouter": "https://openrouter.ai/api/v1",
     "groq": "https://api.groq.com/openai/v1",
+    "dograh": f"{MPS_API_URL}/api/v1/llm",
+    "speaches": "http://localhost:11434/v1",  # overridden by llm_cfg['base_url'] when set
 }
 
 _PROVIDER_DEFAULT_MODELS: dict[str, str] = {
@@ -50,6 +55,8 @@ _PROVIDER_DEFAULT_MODELS: dict[str, str] = {
     "openai": "gpt-4.1-mini",
     "groq": "llama-3.3-70b-versatile",
     "openrouter": "meta-llama/llama-3.3-70b-instruct",
+    "dograh": "default",
+    "speaches": "llama3",
 }
 
 # Tool schemas exposed to the LLM
@@ -415,7 +422,25 @@ class TextEngineClient(BaseDBClient):
         return (row.value if row and row.value else _DEFAULT_SYSTEM_PROMPT)
 
     async def _resolve_llm_config(self, organization_id: int) -> dict:
-        """Return the first org member's LLM config dict."""
+        """Resolve the LLM config for WhatsApp replies.
+
+        Prefers the org's dedicated WHATSAPP_MODEL_CONFIG (set via WhatsApp
+        Settings > AI Agent) when present; otherwise falls back to the first
+        org member's global "Models" config, same as before.
+        """
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(OrganizationConfigurationModel).where(
+                    OrganizationConfigurationModel.organization_id == organization_id,
+                    OrganizationConfigurationModel.key
+                    == OrganizationConfigurationKey.WHATSAPP_MODEL_CONFIG.value,
+                )
+            )
+            wa_model_cfg = result.scalar_one_or_none()
+
+        if wa_model_cfg and wa_model_cfg.value and wa_model_cfg.value.get("provider"):
+            return wa_model_cfg.value
+
         from api.db import db_client as _db
 
         async with self.async_session() as session:
